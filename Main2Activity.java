@@ -2,6 +2,7 @@ package com.impactapp.vishnu.timesync;
 
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -14,17 +15,21 @@ import android.widget.BaseAdapter;
 import android.widget.ListView;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.os.Handler;
 
 import com.google.android.gms.appindexing.Action;
 import com.google.android.gms.appindexing.AppIndex;
 import com.google.android.gms.appindexing.Thing;
 import com.google.android.gms.common.api.GoogleApiClient;
 
+import org.w3c.dom.Node;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Locale;
 
 public class Main2Activity extends AppCompatActivity {
 
@@ -40,7 +45,7 @@ public class Main2Activity extends AppCompatActivity {
         String SwitchString;
         boolean state;
         boolean enable;
-    };
+    }
     /**
      * Variables
      */
@@ -48,11 +53,16 @@ public class Main2Activity extends AppCompatActivity {
     ListView Stored_LV;
     CustomListAdapter myAdapter;
 
+    long MillisecondTime, StartTime, TimeBuff, UpdateTime = 0L;
+    int Seconds, Minutes, Hours, MilliSeconds;
+
+    Handler myHandler = new Handler();
+
 
     /**
      * Data Structures
      */
-    ArrayList<myNode> NodesArray = new ArrayList<myNode>();
+    ArrayList<myNode> NodesArray = new ArrayList<>();
 
 
     /**
@@ -70,19 +80,6 @@ public class Main2Activity extends AppCompatActivity {
 
         InsertStandardNodes();
 
-        /*
-        Stored_LV = (ListView) findViewById(R.id.ActivitiesList);
-        Adapter = new ArrayAdapter<String>(this,R.layout.listviewlayout,R.id.SwitchTime,String_Names);
-        Stored_LV.setAdapter(Adapter);
-
-        Stored_LV.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                long pos = Stored_LV.getItemIdAtPosition(position);
-
-            }
-        });
-        */
         Stored_LV = (ListView) findViewById(R.id.ActivitiesList);
         //myAdapter = new CustomListAdapter(this,R.layout.listviewlayout,R.id.ActivitiesList,String_Names,Times);
         myAdapter = new CustomListAdapter(this,R.layout.listviewlayout,Stored_LV.getId(),NodesArray);
@@ -93,19 +90,81 @@ public class Main2Activity extends AppCompatActivity {
         Stored_LV.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                //Switch selItem = (Switch) Stored_LV.getItemAtPosition(position);
                 Switch mySwitch = (Switch) view.findViewById(R.id.SwitchTime);
-                Log.d("#####",(String) mySwitch.getText());
+                TextView myText = (TextView) view.findViewById(R.id.TextViewTime);
+
                 int index = getIndexOfNode((String) mySwitch.getText());
-                NodesArray.get(index).state = true;
-                DisAllExcept((String) mySwitch.getText());
-                updateListViewAdapter();
+                Log.d("#####",(String) mySwitch.getText());
+                Log.d("#####Index",Integer.toString(index));
+                ChangeSwitchState(index,mySwitch);
+                SwitchSelected(NodesArray.get(index));
             }
         });
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
         client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
+    }
+
+    public void SwitchSelected(final myNode RunningNode) {
+        if(RunningNode.enable && RunningNode.state) {
+            Runnable CountRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    StartRunning(RunningNode);
+                }
+            };
+            new Thread(CountRunnable).start();
+        }
+    }
+
+    public void StartRunning(final myNode RunningNode) {
+        StartTime = SystemClock.uptimeMillis();
+        UpdateTime = returnSeconds(RunningNode.TextString)*1000;
+
+        while(RunningNode.state) {
+            MillisecondTime = UpdateTime + SystemClock.uptimeMillis() - StartTime;
+
+
+            Seconds = (int) (MillisecondTime / 1000);
+            Minutes = Seconds / 60;
+            Hours = Minutes/60;
+            Seconds = Seconds % 60;
+            Minutes = Minutes % 60;
+            Hours = Hours % 60;
+
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            myHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    RunningNode.TextString = ""+ String.format(Locale.US,"%02d",Hours) +":"
+                            + String.format(Locale.US,"%02d",Minutes) + ":"
+                            + String.format(Locale.US,"%02d",Seconds);
+                    UpdateTotal();
+                    updateListViewAdapter();
+                }
+            });
+        }
+    }
+
+    private void UpdateTotal() {
+    }
+
+    private void ChangeSwitchState(int index,Switch mySwitch) {
+        if (NodesArray.get(index).state) {
+            NodesArray.get(index).state = false;
+            EnableAll();
+        } else {
+            NodesArray.get(index).state = true;
+            Log.d("#####",(String) mySwitch.getText());
+            DisAllExcept((String) mySwitch.getText());
+        }
+        updateListViewAdapter();
     }
 
     public void Button_Click(View v) {
@@ -132,7 +191,13 @@ public class Main2Activity extends AppCompatActivity {
     }
 
     private void ClearAll() {
-
+        int limit = NodesArray.size();
+        for(int i = 0;i<limit;i++) {
+            NodesArray.get(i).state = false;
+            NodesArray.get(i).enable = true;
+            NodesArray.get(i).TextString = INITIAL_SETTING;
+        }
+        updateListViewAdapter();
     }
 
     private void removeActivity() {
@@ -143,8 +208,9 @@ public class Main2Activity extends AppCompatActivity {
         int index = -1;
         int limit = NodesArray.size();
         for(int i = 0;i<limit;i++) {
-            if(NodesArray.get(i).SwitchString == selectedAct) {
+            if((NodesArray.get(i).SwitchString).equals(selectedAct)) {
                 index = i;
+                break;
             } else {
                 index = 0;
             }
@@ -160,9 +226,27 @@ public class Main2Activity extends AppCompatActivity {
     private void DisAllExcept(String selectedAct) {
         int limit = NodesArray.size();
         for(int i=0;i<limit;i++){
-            if(NodesArray.get(i).SwitchString != selectedAct) {
+            if(!((NodesArray.get(i).SwitchString).equals(selectedAct))) {
                 NodesArray.get(i).enable = false;
             }
+        }
+    }
+
+    private int returnSeconds(String m_string) {
+
+        int totalSeconds;
+        int Hour = Integer.valueOf(m_string.substring(0,2));
+        int Minute = Integer.valueOf(m_string.substring(3,5));
+        int Seconds = Integer.valueOf(m_string.substring(6,8));
+        totalSeconds = (Hour*3600)+(Minute*60)+Seconds;
+
+        return totalSeconds;
+    }
+
+    private void EnableAll() {
+        int limit = NodesArray.size();
+        for(int i = 0;i<limit;i++) {
+            NodesArray.get(i).enable = true;
         }
     }
 
