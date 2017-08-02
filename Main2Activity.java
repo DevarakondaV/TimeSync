@@ -1,18 +1,24 @@
 package com.impactapp.vishnu.timesync;
 
+import android.app.Dialog;
+import android.app.DialogFragment;
+import android.content.DialogInterface;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.SystemClock;
 import android.support.annotation.NonNull;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.ListView;
+import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.os.Handler;
@@ -150,6 +156,7 @@ public class Main2Activity extends AppCompatActivity {
                 }
             });
         }
+        StartTime = 0;
     }
 
     private void UpdateTotal() {
@@ -184,7 +191,12 @@ public class Main2Activity extends AppCompatActivity {
         }
     }
 
-    private void addNewActivity() {}
+    private void addNewActivity() {
+        DialogFragment newFragment = new AddActivityFragment();
+        newFragment.show(getFragmentManager(),"Add Activity");
+        //newFragment.getDialog().setTitle("Add New Activity");
+    }
+
 
     private void callTotalsActivity() {
 
