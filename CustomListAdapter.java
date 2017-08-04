@@ -2,6 +2,10 @@ package com.impactapp.vishnu.timesync;
 
 import android.app.Activity;
 import android.content.Context;
+import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.SystemClock;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,30 +13,34 @@ import android.widget.ArrayAdapter;
 import android.widget.Switch;
 import android.widget.TextView;
 
-import org.w3c.dom.Text;
-
-import java.sql.Time;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 
 /**
  * Created by Vishnu on 7/28/2017.
  */
 
-public class CustomListAdapter extends ArrayAdapter<String> {
+public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
 
     private Context mContext;
     private int id;
-    private ArrayList<String> Switches = new ArrayList<String>();
-    private ArrayList<String> TimeTexts = new ArrayList<String>();
-    private ArrayList<Boolean> State = new ArrayList<Boolean>();
-    private ArrayList<Boolean> Enable = new ArrayList<Boolean>();
+    private ArrayList<String> Switches = new ArrayList<>();
+    private ArrayList<String> TimeTexts = new ArrayList<>();
+    private ArrayList<Boolean> State = new ArrayList<>();
+    private ArrayList<Boolean> Enable = new ArrayList<>();
+
+
+    private long MillisecondTime, StartTime, TimeBuff, UpdateTime = 0L;
+    private int Seconds, Minutes, Hours, MilliSeconds;
+
+    private Handler myHandler = new Handler();
 
 
 
     public CustomListAdapter(Context context, int resource, int textViewResourceId, List<Main2Activity.myNode> OBJECTS) {
-        super(context,resource,textViewResourceId,(List) OBJECTS);
+        super(context,resource,textViewResourceId,OBJECTS);
         for(int i=0;i<OBJECTS.size();i++) {
             //Switches.add((String) OBJECTS.get(i).TimeSwitch.getText());
             //TimeTexts.add((String) OBJECTS.get(i).TimeTXT.getText());
@@ -46,20 +54,12 @@ public class CustomListAdapter extends ArrayAdapter<String> {
         mContext = context;
     }
 
-    /*
-    public CustomListAdapter(Context context,int resource,int textViewResourceId,List<String> objects,List<String> TId) {
-        super(context,resource,textViewResourceId,objects);
-        mContext = context;
-        Switches = objects;
-        TimeTexts = TId;
-        id = resource;
-    }*/
 
 
     @Override
     public View getView(int position, View v, ViewGroup parent) {
         View mView = v;
-        ActivityHolder holder = null;
+        ActivityHolder holder;
 
         if (mView == null) {
             LayoutInflater vi = (LayoutInflater)mContext.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
@@ -91,12 +91,123 @@ public class CustomListAdapter extends ArrayAdapter<String> {
         holder.TimeSwitch.setEnabled(Enable.get(position));
 
 
+        holder.TimeSwitch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.d("#####index","Called");
+                Switch myS = (Switch) v.findViewById(R.id.SwitchTime);
+                int index = getIndex((String) myS.getText());
+
+                if (!State.get(index)) {
+                    State.set(index,true);
+                    disableAll(index);
+                    notifyDataSetChanged();
+                    switchSelected(index);
+                    Log.d("######",Long.toString(Thread.currentThread().getId()));
+                } else {
+                    Log.d("#####","Changing to uncheck");
+                    State.set(index,false);
+                    EnableAll();
+                }
+                notifyDataSetChanged();
+            }
+        });
+
         return mView;
     }
 
 
-    static class ActivityHolder {
+    private void switchSelected(final int index){
+        if (State.get(index) && Enable.get(index)) {
+            Runnable CountRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    StartRunning(index);
+                }
+            };
+            Thread countThread = new Thread(CountRunnable);
+            countThread.start();
+        }
+    }
+
+    private void StartRunning(final int index) {
+        StartTime = SystemClock.uptimeMillis();
+        UpdateTime = returnSeconds(TimeTexts.get(index))*1000;
+        Log.d("######",Long.toString(Thread.currentThread().getId()));
+        while(State.get(index)) {
+            MillisecondTime = UpdateTime + SystemClock.uptimeMillis() - StartTime;
+
+
+            Seconds = (int) (MillisecondTime / 1000);
+            Minutes = Seconds / 60;
+            Hours = Minutes/60;
+            Seconds = Seconds % 60;
+            Minutes = Minutes % 60;
+            Hours = Hours % 60;
+
+            TimeTexts.set(index,""+ String.format(Locale.US,"%02d",Hours) +":"
+                    + String.format(Locale.US,"%02d",Minutes) + ":"
+                    + String.format(Locale.US,"%02d",Seconds));
+
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            myHandler.post(callnotify);
+        }
+        StartTime = 0;
+    }
+
+    private Runnable callnotify = new Runnable() {
+        @Override
+        public void run() {
+            notifyDataSetChanged();
+        }
+    };
+
+    private int returnSeconds(String m_string) {
+        int totalSeconds;
+        int Hour = Integer.valueOf(m_string.substring(0,2));
+        int Minute = Integer.valueOf(m_string.substring(3,5));
+        int Seconds = Integer.valueOf(m_string.substring(6,8));
+        totalSeconds = (Hour*3600)+(Minute*60)+Seconds;
+        return totalSeconds;
+    }
+
+    private int getIndex(String TxT) {
+        int index = -1;
+        int limit = Switches.size();
+        for(int i = 0;i<limit;i++) {
+            if ((Switches.get(i).equals(TxT))) {
+                index = i;
+            }
+        }
+        return index;
+    }
+
+    private void disableAll(int position) {
+        int limit = Switches.size();
+        for(int i=0;i<limit;i++) {
+            if (i != position) {
+                Enable.set(i,false);
+            }
+        }
+    }
+
+    private void EnableAll() {
+        int limit = Switches.size();
+        for(int i = 0; i<limit;i++) {
+            Enable.set(i,true);
+        }
+    }
+
+    static private class ActivityHolder {
         TextView TimeTxTBox;
         Switch TimeSwitch;
     }
+
+
 }
