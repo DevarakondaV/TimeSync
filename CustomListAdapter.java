@@ -2,6 +2,7 @@ package com.impactapp.vishnu.timesync;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -37,7 +38,7 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
 
     private Handler myHandler = new Handler();
 
-
+    private SharedPreferences sharedPref;
 
     public CustomListAdapter(Context context, int resource, int textViewResourceId, List<Main2Activity.myNode> OBJECTS) {
         super(context,resource,textViewResourceId,OBJECTS);
@@ -146,8 +147,13 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
     }
 
     private void StartRunning(final int index) {
-        StartTime = SystemClock.uptimeMillis();
-        UpdateTime = returnSeconds(TimeTexts.get(index))*1000;
+        sharedPref = getContext().getSharedPreferences(getContext().getString(R.string.SharedPref),Context.MODE_PRIVATE);
+        StartTime = sharedPref.getLong("StartTime",0);
+        UpdateTime = sharedPref.getLong("UpdateTime",0);
+        if (!arestatesfalse()) {
+            StartTime = SystemClock.uptimeMillis();
+            UpdateTime = returnSeconds(TimeTexts.get(index)) * 1000;
+        }
         Log.d("######",Long.toString(Thread.currentThread().getId()));
         while(State.get(index)) {
             MillisecondTime = UpdateTime + SystemClock.uptimeMillis() - StartTime;
@@ -249,6 +255,23 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         Switch TimeSwitch;
     }
 
+    public long returnStartTime() {
+        return StartTime;
+    }
 
+    public long returnUpdateTime() {
+        return UpdateTime;
+    }
+
+    private boolean arestatesfalse() {
+        int limit = State.size();
+        boolean rtnstate = true;
+        for (int i = 0; i < limit; i++) {
+            if (State.get(i)) {
+                rtnstate = false;
+            }
+        }
+        return rtnstate;
+    }
 
 }

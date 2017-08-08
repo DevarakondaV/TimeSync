@@ -318,6 +318,8 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
             PrefEditor.putBoolean(Sstring.concat(getString(R.string.enable)),en);
             PrefEditor.putBoolean(Sstring.concat(getString(R.string.state)),st);
         }
+        PrefEditor.putLong("StartTime",myAdapter.returnStartTime());
+        PrefEditor.putLong("UpdateTime",myAdapter.returnUpdateTime());
 
         PrefEditor.commit();
     }
