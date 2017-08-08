@@ -80,6 +80,7 @@ public class TotalsActivity extends Activity implements EasyPermissions.Permissi
     Integer TotalSoc;
     Integer Total;
 
+    Integer Hel;
 
     String perSoc;
     String perWork;
@@ -479,13 +480,13 @@ public class TotalsActivity extends Activity implements EasyPermissions.Permissi
             Integer hour = c.get(Calendar.HOUR_OF_DAY);
 
             //Declaring results for return inCase function needs to return something
-            List<String> results = new ArrayList<String>();
+            List<String> results = new ArrayList<>();
 
 
             if (hour >= 21) {
                 //ValueRange that will be added to sheet
                 ValueRange newVals = new ValueRange();
-                List<Object> v = new ArrayList<Object>(); //value range must have List<List<Object>> format
+                List<Object> v = new ArrayList<>(); //value range must have List<List<Object>> format
                 v.add(0, strDate);
                 v.add(1, Social);
                 v.add(2, classT);
