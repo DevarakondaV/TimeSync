@@ -103,7 +103,7 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
                     disableAll(index);
                     notifyDataSetChanged();
                     switchSelected(index);
-                    Log.d("######",Long.toString(Thread.currentThread().getId()));
+                    Log.d("######","State Checked");
                 } else {
                     Log.d("#####","Changing to uncheck");
                     State.set(index,false);
@@ -114,6 +114,21 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         });
 
         return mView;
+    }
+
+
+    public Object requestVal(int index,String Val) {
+        if (Val.equals("time")) {
+            return TimeTexts.get(index);
+        } else if (Val.equals("enable")) {
+            return Enable.get(index);
+        } else {
+            return State.get(index);
+        }
+    }
+
+    public void resumeChecked(int index) {
+        switchSelected(index);
     }
 
 
@@ -165,8 +180,33 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         @Override
         public void run() {
             notifyDataSetChanged();
+            updatetotaltime();
         }
     };
+
+    private void updatetotaltime() {
+        Activity act = (Activity) getContext();
+        if (act != null) {
+            TextView total = (TextView) act.findViewById(R.id.TimeTotal);
+            int sumSec = 0;
+            int limit = TimeTexts.size()-2;
+            for (int i = 0;i<limit;i=i+3) {
+                sumSec = sumSec+returnSeconds(TimeTexts.get(i));
+                sumSec = sumSec+returnSeconds(TimeTexts.get(i+1));
+                sumSec = sumSec+returnSeconds(TimeTexts.get(i+2));
+            }
+
+            int min = sumSec / 60;
+            int hour = min/60;
+            int sec = sumSec % 60;
+            min = min % 60;
+            hour = hour % 60;
+
+            total.setText(""+ String.format(Locale.US,"%02d",hour) +":"
+                    + String.format(Locale.US,"%02d",min) + ":"
+                    + String.format(Locale.US,"%02d",sec));
+        }
+    }
 
     private int returnSeconds(String m_string) {
         int totalSeconds;
@@ -208,6 +248,7 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         TextView TimeTxTBox;
         Switch TimeSwitch;
     }
+
 
 
 }

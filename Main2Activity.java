@@ -2,6 +2,7 @@ package com.impactapp.vishnu.timesync;
 
 import android.app.Dialog;
 import android.app.DialogFragment;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.database.Cursor;
@@ -38,6 +39,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Locale;
+import java.util.SortedMap;
 
 public class Main2Activity extends AppCompatActivity implements AddActivityFragment.AddActivityFragmentListener, RemoveActivityFragment.RemoveActivityFragmentListener {
 
@@ -62,11 +64,13 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
 
     Handler myHandler = new Handler();
 
-
+    private SharedPreferences sharedPref;
+    private SharedPreferences.Editor PrefEditor;
     /**
      * Data Structures
      */
-    ArrayList<myNode> NodesArray = new ArrayList<>();
+    ArrayList<myNode> NodesArray = new ArrayList<myNode>();
+    TextView totalTime;
 
 
     /**
@@ -82,11 +86,14 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
 
         //String[] itemname = {"Social","Class","Homework","Other","ECWork","Hello","Strings","Helloword"};
 
-        InsertStandardNodes();
+        sharedPref = getApplicationContext().getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE);
+
+        //InsertStandardNodes();
 
         Stored_LV = (ListView) findViewById(R.id.ActivitiesList);
-        myAdapter = new CustomListAdapter(this,R.layout.listviewlayout,Stored_LV.getId(),NodesArray);
-        Stored_LV.setAdapter(myAdapter);
+        totalTime = (TextView) findViewById(R.id.TimeTotal);
+        //myAdapter = new CustomListAdapter(this,R.layout.listviewlayout,Stored_LV.getId(),NodesArray);
+        //Stored_LV.setAdapter(myAdapter);
 
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
@@ -131,6 +138,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
             NodesArray.get(i).TextString = INITIAL_SETTING;
         }
         updateListViewAdapter();
+        totalTime.setText(INITIAL_SETTING);
     }
 
     private void removeActivity() {
@@ -211,47 +219,6 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         NodesArray.add(N7);
         NodesArray.add(N8);
 
-
-        /*
-        //TestNodes
-
-        myNode N9 = new myNode();
-        myNode N10 = new myNode();
-        myNode N11 = new myNode();
-        myNode N12 = new myNode();
-        myNode N13 = new myNode();
-
-        N9.SwitchString = "dadsfaf";
-        N9.TextString = "asddaf";
-        N9.state = false;
-        N9.enable = true;
-
-        N10.SwitchString = "daadsff";
-        N10.TextString = "dadaff";
-        N10.state = false;
-        N10.enable = true;
-
-        N11.SwitchString = "dadaff";
-        N11.TextString = "dasfdaf";
-        N11.state = false;
-        N11.enable = true;
-
-        N12.SwitchString = "dadfaf";
-        N12.TextString = "dafdaf";
-        N12.state = false;
-        N12.enable = true;
-
-        N13.SwitchString = "dfadaf";
-        N13.TextString = "ddaf";
-        N13.state = false;
-        N13.enable = true;
-
-        NodesArray.add(N9);
-        NodesArray.add(N10);
-        NodesArray.add(N11);
-        NodesArray.add(N12);
-        NodesArray.add(N13);*/
-
     }
 
     private int getIndexOfNode(String TxT) {
@@ -326,6 +293,78 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     }
 
     @Override
+    public void onPause() {
+        super.onPause();
+        StoreVals();
+    }
+
+    private void StoreVals() {
+        int limit = NodesArray.size();
+        boolean en,st;
+        String Sstring;
+        String Tstring;
+
+        PrefEditor = sharedPref.edit();
+        PrefEditor.putInt(getString(R.string.TotalNumberActivity),limit);
+        for(int i=0;i<limit;i++) {
+            Sstring = NodesArray.get(i).SwitchString;
+
+            Tstring = (String) myAdapter.requestVal(i,getString(R.string.time));
+            en = (Boolean) myAdapter.requestVal(i,getString(R.string.enable));
+            st = (Boolean) myAdapter.requestVal(i,getString(R.string.state));
+
+            PrefEditor.putString(Integer.toString(i),Sstring);
+            PrefEditor.putString(Sstring.concat(getString(R.string.time)),Tstring);
+            PrefEditor.putBoolean(Sstring.concat(getString(R.string.enable)),en);
+            PrefEditor.putBoolean(Sstring.concat(getString(R.string.state)),st);
+        }
+
+        PrefEditor.commit();
+    }
+
+
+    private void LoadDefaults() {
+        if (!NodesArray.isEmpty()) {NodesArray.clear();}
+        //PrefEditor = sharedPref.edit();
+        //PrefEditor.clear();
+        //PrefEditor.putBoolean(getString(R.string.SetDefault),true);
+        //PrefEditor.commit();
+
+        myNode N1,N2,N3,N4,N5,N6,N7,N8;
+        N1 = new myNode(); N1.SwitchString = "Social";N1.TextString = INITIAL_SETTING;N1.enable = true; N1.state = false;
+        N2 = new myNode(); N2.SwitchString = "Class";N2.TextString = INITIAL_SETTING;N2.enable = true; N2.state = false;
+        N3 = new myNode(); N3.SwitchString = "Homework";N3.TextString = INITIAL_SETTING;N3.enable = true; N3.state = false;
+        N4 = new myNode(); N4.SwitchString = "Study";N4.TextString = INITIAL_SETTING;N4.enable = true; N4.state = false;
+        N5 = new myNode(); N5.SwitchString = "Gym";N5.TextString = INITIAL_SETTING;N5.enable = true; N5.state = false;
+        N6 = new myNode(); N6.SwitchString = "Sleep";N6.TextString = INITIAL_SETTING;N6.enable = true; N6.state = false;
+        N7 = new myNode(); N7.SwitchString = "Work";N7.TextString = INITIAL_SETTING;N7.enable = true; N7.state = false;
+        N8 = new myNode(); N8.SwitchString = "Other";N8.TextString = INITIAL_SETTING;N8.enable = true; N8.state = false;
+
+        //NodesArray.add(0,N1);
+        NodesArray.add(N1);NodesArray.add(N2);NodesArray.add(N3);NodesArray.add(N4);
+        NodesArray.add(N5);NodesArray.add(N6);NodesArray.add(N7);NodesArray.add(N8);
+    }
+
+    private int LoadStoredVals() {
+        int checked = -1;
+        int limit = sharedPref.getInt(getString(R.string.TotalNumberActivity),-1);
+        String pos;
+        for(int i = 0;i<limit;i++) {
+            pos = Integer.toString(i);
+            myNode newNode = new myNode();
+            newNode.SwitchString = sharedPref.getString(pos,"None");
+            newNode.TextString = sharedPref.getString(newNode.SwitchString.concat(getString(R.string.time)),INITIAL_SETTING);
+            newNode.enable = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.enable)),false);
+            newNode.state = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.state)),false);
+            if (newNode.state) {
+                checked = i;
+            }
+            NodesArray.add(newNode);
+        }
+        return checked;
+    }
+
+    @Override
     public void onStop() {
         super.onStop();
 
@@ -333,5 +372,25 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         // See https://g.co/AppIndexing/AndroidStudio for more information.
         AppIndex.AppIndexApi.end(client, getIndexApiAction());
         client.disconnect();
+    }
+
+    @Override
+    public void onResume(){
+        super.onResume();
+
+        int checked = -1;
+
+        if (sharedPref.getBoolean("FirstRun",false) || sharedPref.getInt(getString(R.string.TotalNumberActivity),0) == 0) {
+            LoadDefaults();
+            sharedPref.edit().putBoolean("FirstRun",false).commit();
+        } else {
+            checked = LoadStoredVals();
+        }
+        updateListViewAdapter();
+
+
+        if (checked != -1) {
+            myAdapter.resumeChecked(checked);
+        }
     }
 }
