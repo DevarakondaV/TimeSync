@@ -1,10 +1,14 @@
 package com.impactapp.vishnu.timesync;
 
 import android.Manifest;
+import android.accounts.AccountManager;
 import android.app.Activity;
 import android.app.Dialog;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -12,6 +16,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
 import android.util.Log;
+import android.view.View;
 
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.AdSize;
@@ -24,6 +29,7 @@ import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
@@ -32,11 +38,14 @@ import com.google.api.client.util.ExponentialBackOff;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
 import com.google.api.services.sheets.v4.model.Sheet;
+import com.google.api.services.sheets.v4.model.Spreadsheet;
 import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.sql.Array;
 import java.util.List;
 import java.util.Arrays;
@@ -58,8 +67,10 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     public void onPermissionsDenied(int myInt, List<String> SList) {}
 
     GoogleAccountCredential mCredentials;
+    ProgressDialog mProgress;
     private static final String PREF_ACCOUNT_NAME = "accountName";
 
+    static final int REQUEST_AUTHORIZATION = 1001;
     static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_PERMISSION_GET_ACCOUNT = 1003;
@@ -91,7 +102,8 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
 
         // Getting Account Credentials
         mCredentials = GoogleAccountCredential.usingOAuth2(getApplicationContext(), Arrays.asList(SCOPE)).setBackOff(new ExponentialBackOff());
-
+        mProgress = new ProgressDialog(this);
+        mProgress.setMessage("Calling sheets...");
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -106,7 +118,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         } else if (!isDeviceOnline()){
             callDeviceOfflineDialog();
         } else {
-            new MakeRequestTask(mCredentials).execute();
+            new MakeRequestTask(mCredentials,MakeRequestTask.REQUEST_NEW_SHEET).execute();
         }
     }
 
@@ -164,7 +176,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     private void chooseAccount() {
         if (EasyPermissions.hasPermissions(this, Manifest.permission.GET_ACCOUNTS)) {
             String accountName = getPreferences(Context.MODE_PRIVATE).getString(PREF_ACCOUNT_NAME,null);
-
+            Log.d("#####",getPreferences(Context.MODE_PRIVATE).toString());
 
             if (accountName != null) {
                 mCredentials.setSelectedAccountName(accountName);
@@ -176,31 +188,149 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             EasyPermissions.requestPermissions(this,"This app needs to access your Google account",REQUEST_PERMISSION_GET_ACCOUNT,Manifest.permission.GET_ACCOUNTS);
         }
     }
+
+    @Override
+    protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+
+
+        switch(requestCode) {
+            case REQUEST_GOOGLE_PLAY_SERVICES:
+                if (resultCode != RESULT_OK) {
+                    callGoogleAPIServiceDialog();
+                } else {
+                    getAPIResults();
+                }
+                break;
+            case REQUEST_ACCOUNT_PICKER:
+                if (resultCode == RESULT_OK && data != null && data.getExtras() != null) {
+                    String accountName = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+
+                    if (accountName != null) {
+                        SharedPreferences settings = getPreferences(Context.MODE_PRIVATE);
+                        SharedPreferences.Editor editor = settings.edit();
+                        editor.putString(PREF_ACCOUNT_NAME,accountName);
+                        editor.apply();
+                        mCredentials.setSelectedAccountName(accountName);
+                        getAPIResults();
+                    }
+                }
+                break;
+            case REQUEST_AUTHORIZATION:
+                if (resultCode == RESULT_OK) {
+                    getAPIResults();
+                }
+                break;
+        }
+
+    }
+
+    private void callGoogleAPIServiceDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(DataActivity.this);
+        builder.setTitle("Error");
+        builder.setMessage("This app requires Google Play Services. Please install Google Play Services on your devices ad relaunch this app.");
+        builder.setNegativeButton("Dismiss", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
     //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
+
+    public void TestButtonClick(View v) {
+        getAPIResults();
+    }
 
     //Private Class
     private class MakeRequestTask extends AsyncTask<Void,Void,List<String>> {
         private Sheets mService = null;
+        private String sheetsID;
         private Exception mLastError = null;
 
-        MakeRequestTask(GoogleAccountCredential mCredentials) {
+        private int COMMAND;
+
+        static final int REQUEST_NEW_SHEET = 1004;
+        static final int SAVE_TODAYS_VALUES = 1005;
+        static final int LOAD_DATA_FROM_SHEETS = 1006;
+
+        MakeRequestTask(GoogleAccountCredential mCredentials,final int COMMANDREQUEST) {
             HttpTransport transport = AndroidHttp.newCompatibleTransport();
             JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+            COMMAND = COMMANDREQUEST;
             mService = new Sheets.Builder(transport,jsonFactory,mCredentials).setApplicationName("TimeSync").build();
         }
 
         @Override
         protected List<String> doInBackground(Void... params) {
             try {
-                return null;
+                return getResultsFromSheets();
             } catch (Exception e) {
                 mLastError = e;
-                LaunchDialogWithMessage(e.getMessage());
+                Log.d("EXCEPTION",e.getMessage());
                 cancel(true);
                 return null;
             }
         }
+
+
+
+        private List<String> getResultsFromSheets() throws IOException,GeneralSecurityException {
+            switch(COMMAND) {
+                case REQUEST_NEW_SHEET:
+                    return requestNewSheet();
+                case SAVE_TODAYS_VALUES:
+                    return saveValues();
+                case LOAD_DATA_FROM_SHEETS:
+                    return loadDataFromSheets();
+                default:
+                    return null;
+            }
+        }
+
+
+        private List<String> requestNewSheet() throws IOException,GeneralSecurityException {
+            Spreadsheet requestSheet = new Spreadsheet();
+            Sheets sheetsService = createSheetsService();
+            Sheets.Spreadsheets.Create request = sheetsService.spreadsheets().create(requestSheet);
+
+            Spreadsheet response = request.execute();
+            Log.d("SSID",response.getSpreadsheetId());
+            return null;
+        }
+
+        public Sheets createSheetsService() throws IOException,GeneralSecurityException {
+            HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();//GoogleNetHttpTransport.newTrustedTransport();
+            JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+
+            mService = new Sheets.Builder(httpTransport,jsonFactory,mCredentials).setApplicationName("TimeSync").build();
+            return mService;
+        }
+
+        private List<String> saveValues() {
+            return null;
+        }
+
+        private List<String> loadDataFromSheets() {
+            return null;
+        }
+
+        @Override
+        protected void onPreExecute() {
+
+        }
+
+        @Override
+        protected void onPostExecute(List<String> output) {
+
+        }
+
+
+
 
     }
 
