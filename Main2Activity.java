@@ -4,6 +4,7 @@ import android.app.Dialog;
 import android.app.DialogFragment;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
@@ -69,7 +70,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     /**
      * Data Structures
      */
-    ArrayList<myNode> NodesArray = new ArrayList<myNode>();
+    ArrayList<myNode> NodesArray = new ArrayList<>();
     TextView totalTime;
 
 
@@ -127,7 +128,8 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     }
 
     private void callTotalsActivity() {
-
+        Intent newAct = new Intent(Main2Activity.this,DataActivity.class);
+        startActivity(newAct);
     }
 
     private void ClearAll() {
