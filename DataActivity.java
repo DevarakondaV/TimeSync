@@ -30,23 +30,40 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.http.HttpEncoding;
+import com.google.api.client.http.HttpRequest;
+import com.google.api.client.http.HttpRequestFactory;
 import com.google.api.client.http.HttpTransport;
+import com.google.api.client.http.LowLevelHttpRequest;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.Data;
 import com.google.api.client.util.ExponentialBackOff;
+import com.google.api.client.util.StreamingContent;
+import com.google.api.client.util.Value;
 import com.google.api.services.sheets.v4.Sheets;
 import com.google.api.services.sheets.v4.SheetsScopes;
+import com.google.api.services.sheets.v4.model.AppendValuesResponse;
+import com.google.api.services.sheets.v4.model.BatchGetValuesResponse;
+import com.google.api.services.sheets.v4.model.Request;
 import com.google.api.services.sheets.v4.model.Sheet;
 import com.google.api.services.sheets.v4.model.Spreadsheet;
+import com.google.api.services.sheets.v4.model.SpreadsheetProperties;
+import com.google.api.services.sheets.v4.model.ValueRange;
 import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.sql.Array;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Arrays;
 
@@ -75,6 +92,11 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_PERMISSION_GET_ACCOUNT = 1003;
 
+
+    String DataPreferenceName = "DataPref";
+    SharedPreferences myDataPref;
+    SharedPreferences.Editor DataPrefEditor;
+
     /**
      * ATTENTION: This was auto-generated to implement the App Indexing API.
      * See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -91,6 +113,10 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         AdRequest adRequest = new AdRequest.Builder().addTestDevice("9AED419BE2733780159C7FF112BAE873").build();
         mAdView.loadAd(adRequest);
 
+        /*myDataPref = getSharedPreferences(DataPreferenceName,Context.MODE_PRIVATE);
+        if (myDataPref.getAll() == null) {
+            getAPIResults(MakeRequestTask.LOAD_DATA_FROM_SHEETS);
+        }*/
 
         //Testing graph View
         gView = (GraphView) findViewById(R.id.graph);
@@ -100,10 +126,13 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         });
         gView.addSeries(series);
 
+
         // Getting Account Credentials
         mCredentials = GoogleAccountCredential.usingOAuth2(getApplicationContext(), Arrays.asList(SCOPE)).setBackOff(new ExponentialBackOff());
         mProgress = new ProgressDialog(this);
-        mProgress.setMessage("Calling sheets...");
+        //mProgress.setMessage("Calling sheets...");
+
+        LogStoredVals();
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -118,7 +147,13 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         } else if (!isDeviceOnline()){
             callDeviceOfflineDialog();
         } else {
-            new MakeRequestTask(mCredentials,MakeRequestTask.REQUEST_NEW_SHEET).execute();
+            String sheetID = getPreferences(Context.MODE_PRIVATE).getString(getString(R.string.SheetID),null);
+            if (sheetID == null) {
+                new MakeRequestTask(mCredentials,MakeRequestTask.REQUEST_NEW_SHEET).execute();
+            } else {
+                int requestFromSheets = MakeRequestTask.TESTING;
+                new MakeRequestTask(mCredentials,requestFromSheets).execute();
+            }
         }
     }
 
@@ -249,20 +284,22 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     //Private Class
     private class MakeRequestTask extends AsyncTask<Void,Void,List<String>> {
         private Sheets mService = null;
-        private String sheetsID;
         private Exception mLastError = null;
+        private String sheetID;
 
         private int COMMAND;
 
         static final int REQUEST_NEW_SHEET = 1004;
         static final int SAVE_TODAYS_VALUES = 1005;
         static final int LOAD_DATA_FROM_SHEETS = 1006;
+        static final int TESTING = 5555;
 
         MakeRequestTask(GoogleAccountCredential mCredentials,final int COMMANDREQUEST) {
             HttpTransport transport = AndroidHttp.newCompatibleTransport();
             JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
             COMMAND = COMMANDREQUEST;
             mService = new Sheets.Builder(transport,jsonFactory,mCredentials).setApplicationName("TimeSync").build();
+            sheetID = getPreferences(Context.MODE_PRIVATE).getString(getString(R.string.SheetID),null);
         }
 
         @Override
@@ -277,8 +314,6 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             }
         }
 
-
-
         private List<String> getResultsFromSheets() throws IOException,GeneralSecurityException {
             switch(COMMAND) {
                 case REQUEST_NEW_SHEET:
@@ -287,28 +322,78 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
                     return saveValues();
                 case LOAD_DATA_FROM_SHEETS:
                     return loadDataFromSheets();
+                case TESTING:
+                    return TestingMethod("Homework");
                 default:
                     return null;
             }
         }
 
+        private List<String> TestingMethod(String RequestedActivity) throws IOException, GeneralSecurityException {
+            Log.d("######TestingMethod","Test");
 
-        private List<String> requestNewSheet() throws IOException,GeneralSecurityException {
-            Spreadsheet requestSheet = new Spreadsheet();
-            Sheets sheetsService = createSheetsService();
-            Sheets.Spreadsheets.Create request = sheetsService.spreadsheets().create(requestSheet);
+            int col = -1;
+            int limit;
+            ValueRange range = mService.spreadsheets().values().get(sheetID,"A1:Z").execute();
+            List<Object> titles = range.getValues().get(0);
+            limit = titles.size();
+            for (int i=0;i<limit;i++) {
+                if (( titles.get(i)).equals(RequestedActivity)) {
+                    col = i;
+                }
+            }
 
-            Spreadsheet response = request.execute();
-            Log.d("SSID",response.getSpreadsheetId());
+
+            range = mService.spreadsheets().values().get(sheetID,getAlphabetVal(col).concat("2:1000")).setMajorDimension("COLUMNS").execute();
+            List<Object> reqVals = range.getValues().get(0);
+            for (int i = 0;i<reqVals.size();i++) {
+                Log.d("#####",((String) reqVals.get(i)));
+            }
             return null;
         }
 
-        public Sheets createSheetsService() throws IOException,GeneralSecurityException {
-            HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();//GoogleNetHttpTransport.newTrustedTransport();
-            JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
+        private String getAlphabetVal(int Col) {
+            String vals = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            return Character.toString(vals.charAt(Col));
+        }
 
+        private List<String> requestNewSheet() throws IOException,GeneralSecurityException {
+            Spreadsheet requestSheet = new Spreadsheet();
+            SpreadsheetProperties shProp = new SpreadsheetProperties();
+            shProp.set("title",("DailyTimeUsage:     DateCreated:").concat(new SimpleDateFormat("yyyy-MM-dd").format(Calendar.getInstance().getTime())));
+            requestSheet.setProperties(shProp);
+
+            HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();
+            JsonFactory jsonFactory = JacksonFactory.getDefaultInstance();
             mService = new Sheets.Builder(httpTransport,jsonFactory,mCredentials).setApplicationName("TimeSync").build();
-            return mService;
+
+            Sheets.Spreadsheets.Create request = mService.spreadsheets().create(requestSheet);
+
+            Spreadsheet response = request.execute();
+            sheetID = response.getSpreadsheetId();
+            getPreferences(Context.MODE_PRIVATE).edit().putString("SheetID",sheetID).apply();
+
+            StoreActivityTitles();
+
+            return null;
+        }
+
+        private void StoreActivityTitles() throws IOException {
+            SharedPreferences actPref = getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE);
+
+            ValueRange newVals = new ValueRange();
+            List<Object> v = new ArrayList<>();
+            v.add("Date");
+
+            for (int i = 0;i<actPref.getInt(getString(R.string.TotalNumberActivity),0);i++) {
+                v.add(actPref.getString(Integer.toString(i),null));
+            }
+            List<List<Object>> vals = new ArrayList<>();
+            vals.add(0,v);
+            newVals.setValues(vals);
+            newVals.setMajorDimension("COLUMNS");
+
+            AppendValuesResponse ap = this.mService.spreadsheets().values().append(sheetID,"A1",newVals).setValueInputOption("RAW").execute();
         }
 
         private List<String> saveValues() {
@@ -321,15 +406,14 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
 
         @Override
         protected void onPreExecute() {
-
+            mProgress.setMessage("Calling Sheets");
+            mProgress.show();
         }
 
         @Override
         protected void onPostExecute(List<String> output) {
-
+            mProgress.dismiss();
         }
-
-
 
 
     }
@@ -350,6 +434,19 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         Dialog dialog = builder.create();
         dialog.show();
     }
+
+
+
+    //Helper Vars
+    public void LogStoredVals() {
+        SharedPreferences pref = getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE);
+        int limit = pref.getInt(getString(R.string.TotalNumberActivity),-1);
+        Log.d("#####Tot",Integer.toString(limit));
+        for (int i=0;i<limit;i++) {
+            Log.d("#####ACT",pref.getString(Integer.toString(i),null));
+        }
+    }
+
 
     /**
      * ATTENTION: This was auto-generated to implement the App Indexing API.
@@ -372,6 +469,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         if (mAdView != null) {
             mAdView.pause();
         }
+        //getPreferences(Context.MODE_PRIVATE).edit().remove(getString(R.string.SheetID)).commit();
         super.onPause();
     }
 
