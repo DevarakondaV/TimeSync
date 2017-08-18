@@ -4,6 +4,7 @@ import android.Manifest;
 import android.accounts.AccountManager;
 import android.app.Activity;
 import android.app.Dialog;
+import android.app.DialogFragment;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -51,6 +52,8 @@ import com.google.api.services.sheets.v4.model.Spreadsheet;
 import com.google.api.services.sheets.v4.model.SpreadsheetProperties;
 import com.google.api.services.sheets.v4.model.ValueRange;
 import com.jjoe64.graphview.GraphView;
+import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter;
+import com.jjoe64.graphview.series.BarGraphSeries;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
@@ -64,6 +67,7 @@ import java.sql.Array;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Arrays;
 
@@ -73,10 +77,13 @@ import pub.devrel.easypermissions.EasyPermissions;
  * Created by Vishnu on 8/9/2017.
  */
 
-public class DataActivity extends Activity implements EasyPermissions.PermissionCallbacks {
+public class DataActivity extends Activity implements EasyPermissions.PermissionCallbacks,GraphSettingsFragment.GraphSettingsFragmentListener {
 
     private AdView mAdView;
     private GraphView gView;
+    private Boolean RequestingNewData;
+    private String CurDataTitle;
+    private Boolean MultiplePlots;
 
     @Override
     public void onPermissionsGranted(int myInt, List<String> SList) {}
@@ -93,8 +100,8 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     static final int REQUEST_PERMISSION_GET_ACCOUNT = 1003;
 
 
-    String DataPreferenceName = "DataPref";
-    SharedPreferences myDataPref;
+    static String DataPreferenceName = "DataPref";
+    SharedPreferences mDataPref;
     SharedPreferences.Editor DataPrefEditor;
 
     /**
@@ -120,13 +127,16 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
 
         //Testing graph View
         gView = (GraphView) findViewById(R.id.graph);
-        LineGraphSeries<DataPoint> series = new LineGraphSeries<>(new DataPoint[] {
-                new DataPoint(0,1),new DataPoint(1,5),new DataPoint(2,3),
-                new DataPoint(4,6)
+        gView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                onGraphClickListener();
+            }
         });
-        gView.addSeries(series);
 
 
+        RequestingNewData = false;
+        MultiplePlots = false;
         // Getting Account Credentials
         mCredentials = GoogleAccountCredential.usingOAuth2(getApplicationContext(), Arrays.asList(SCOPE)).setBackOff(new ExponentialBackOff());
         mProgress = new ProgressDialog(this);
@@ -134,9 +144,19 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
 
         LogStoredVals();
 
+        //Loading data file
+        mDataPref = getSharedPreferences(DataPreferenceName,Context.MODE_APPEND);
+
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
         client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
+
+        if (mDataPref.getString(getString(R.string.ActDataTitle),null) == null) {
+            mDataPref.edit().putString(getString(R.string.ActDataTitle),getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE).getString("0","NULL")).apply();
+            getAPIResults();
+        } else {
+            LoadValuesIntoGraphView();
+        }
     }
 
     private void getAPIResults() {
@@ -151,11 +171,14 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             if (sheetID == null) {
                 new MakeRequestTask(mCredentials,MakeRequestTask.REQUEST_NEW_SHEET).execute();
             } else {
-                int requestFromSheets = MakeRequestTask.TESTING;
-                new MakeRequestTask(mCredentials,requestFromSheets).execute();
+                if (RequestingNewData) {
+                    new MakeRequestTask(mCredentials,MakeRequestTask.LOAD_DATA_FROM_SHEETS).execute();
+                    RequestingNewData = false;
+                }
             }
         }
     }
+
 
     //Check Device Internet Connection
     //##############################################################################################
@@ -281,6 +304,50 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         getAPIResults();
     }
 
+
+    public void LoadValuesIntoGraphView() {
+
+        LineGraphSeries<DataPoint> series = new LineGraphSeries<>();
+        String title = mDataPref.getString(this.getString(R.string.ActDataTitle),null);
+        if(title == null) {
+            Log.d("#######","NULL");
+        } else {
+            int limit = mDataPref.getInt(this.getString(R.string.DataSize),0);
+            Log.d("######LIMIT",Integer.toString(limit));
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.DATE,-limit);
+            Date d1 = cal.getTime();
+            if (!MultiplePlots) {
+                gView.removeAllSeries();
+            }
+            gView.getViewport().setXAxisBoundsManual(true);
+            gView.getViewport().setMinX(d1.getTime());
+            gView.getGridLabelRenderer().setLabelFormatter(new DateAsXAxisLabelFormatter(getApplicationContext()));
+            gView.getGridLabelRenderer().setNumHorizontalLabels(3);
+            for(int i=1;i<limit;i++) {
+                series.appendData(new DataPoint(d1,mDataPref.getInt(Integer.toString(i),0)),true,limit);
+                cal.add(Calendar.DATE,1);
+                d1 = cal.getTime();
+
+            }
+            gView.getViewport().setMaxX(d1.getTime());
+            gView.addSeries(series);
+            gView.setTitle(title);
+            gView.setTitleTextSize(100);
+            gView.getGridLabelRenderer().setHorizontalAxisTitle("Date");
+            gView.getGridLabelRenderer().setVerticalAxisTitle("Time in Hours");
+            gView.getViewport().setScalable(true);
+            gView.getViewport().setScalableY(true);
+            gView.onDataChanged(true,true);
+        }
+    }
+
+
+    public void onGraphClickListener() {
+        DialogFragment newFrag = new GraphSettingsFragment();
+        newFrag.show(getFragmentManager(),"Add Activity");
+    }
+
     //Private Class
     private class MakeRequestTask extends AsyncTask<Void,Void,List<String>> {
         private Sheets mService = null;
@@ -308,47 +375,29 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
                 return getResultsFromSheets();
             } catch (Exception e) {
                 mLastError = e;
-                Log.d("EXCEPTION",e.getMessage());
+                mProgress.dismiss();
+                Log.d("EXCEPTION", e.getMessage());
                 cancel(true);
                 return null;
             }
         }
 
-        private List<String> getResultsFromSheets() throws IOException,GeneralSecurityException {
+        private List<String> getResultsFromSheets() throws Exception {
             switch(COMMAND) {
                 case REQUEST_NEW_SHEET:
                     return requestNewSheet();
                 case SAVE_TODAYS_VALUES:
                     return saveValues();
                 case LOAD_DATA_FROM_SHEETS:
-                    return loadDataFromSheets();
+                    return loadDataFromSheets(mDataPref.getString(getString(R.string.ActDataTitle),getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE).getString("0",null)));
                 case TESTING:
-                    return TestingMethod("Homework");
+                    return TestingMethod();
                 default:
                     return null;
             }
         }
 
-        private List<String> TestingMethod(String RequestedActivity) throws IOException, GeneralSecurityException {
-            Log.d("######TestingMethod","Test");
-
-            int col = -1;
-            int limit;
-            ValueRange range = mService.spreadsheets().values().get(sheetID,"A1:Z").execute();
-            List<Object> titles = range.getValues().get(0);
-            limit = titles.size();
-            for (int i=0;i<limit;i++) {
-                if (( titles.get(i)).equals(RequestedActivity)) {
-                    col = i;
-                }
-            }
-
-
-            range = mService.spreadsheets().values().get(sheetID,getAlphabetVal(col).concat("2:1000")).setMajorDimension("COLUMNS").execute();
-            List<Object> reqVals = range.getValues().get(0);
-            for (int i = 0;i<reqVals.size();i++) {
-                Log.d("#####",((String) reqVals.get(i)));
-            }
+        private List<String> TestingMethod() throws IOException, GeneralSecurityException {
             return null;
         }
 
@@ -391,7 +440,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             List<List<Object>> vals = new ArrayList<>();
             vals.add(0,v);
             newVals.setValues(vals);
-            newVals.setMajorDimension("COLUMNS");
+            newVals.setMajorDimension("ROWS");
 
             AppendValuesResponse ap = this.mService.spreadsheets().values().append(sheetID,"A1",newVals).setValueInputOption("RAW").execute();
         }
@@ -400,14 +449,39 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             return null;
         }
 
-        private List<String> loadDataFromSheets() {
+        private List<String> loadDataFromSheets(String RequestedActivity) throws Exception {
+            int col = -1;
+            int limit;
+            ValueRange range = mService.spreadsheets().values().get(sheetID,"A1:Z").execute();
+            List<Object> titles = range.getValues().get(0);
+            limit = titles.size();
+            for (int i=0;i<limit;i++) {
+                if (( titles.get(i)).equals(RequestedActivity)) {
+                    col = i;
+                }
+            }
+
+            DataPrefEditor = mDataPref.edit();
+            if (mDataPref.getAll() != null) { DataPrefEditor.clear();}
+            DataPrefEditor.apply();
+
+            DataPrefEditor = mDataPref.edit();
+            limit = range.getValues().size();
+            DataPrefEditor.putString(getString(R.string.ActDataTitle),RequestedActivity);
+            DataPrefEditor.putInt(getString(R.string.DataSize),limit);
+            for(int i=1;i<limit;i++) {
+                Log.d("######",(String) range.getValues().get(i).get(col));
+                DataPrefEditor.putInt(Integer.toString(i),Integer.parseInt((String) range.getValues().get(i).get(col)));
+            }
+            DataPrefEditor.apply();
+            LoadValuesIntoGraphView();
             return null;
         }
 
         @Override
         protected void onPreExecute() {
-            mProgress.setMessage("Calling Sheets");
-            mProgress.show();
+           mProgress.setMessage("Calling Sheets");
+           mProgress.show();
         }
 
         @Override
@@ -447,6 +521,29 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         }
     }
 
+
+    //GraphSettingListenerImplemntation
+    @Override
+    public void onGraphSettingsPositiveClick(DialogFragment dialog) {
+        GraphSettingsFragment myFrag = (GraphSettingsFragment) dialog;
+        String selectedItem = myFrag.getSelectedAct();
+        String savedDatatitleval = mDataPref.getString(getString(R.string.ActDataTitle),null);
+
+
+        if (savedDatatitleval != null) {
+            if (!selectedItem.equals(savedDatatitleval)) {
+                RequestingNewData = true;
+                mDataPref.edit().putString(getString(R.string.ActDataTitle),selectedItem).apply();
+                getAPIResults();
+            }
+        }
+        MultiplePlots = myFrag.isBoxChecked();
+        myFrag.dismiss();
+    }
+
+    public void onGraphSettingsNegativeClick(DialogFragment dialog) {
+        dialog.dismiss();
+    }
 
     /**
      * ATTENTION: This was auto-generated to implement the App Indexing API.
