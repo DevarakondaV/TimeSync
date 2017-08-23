@@ -40,7 +40,7 @@ public class GraphSettingsFragment extends DialogFragment {
         AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
 
         inflater = getActivity().getLayoutInflater();
-        mView = inflater.inflate(R.layout.graph_settings_frag,null);
+        mView = inflater.inflate(R.layout.graph_settings_frag, null);
 
         sharedPref = getActivity().getApplicationContext().getSharedPreferences(getString(R.string.SharedPref), Context.MODE_PRIVATE);
         DataTitleSpinner = (Spinner) mView.findViewById(R.id.GSspinner);

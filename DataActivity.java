@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -17,6 +18,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 
 import com.google.android.gms.ads.AdRequest;
@@ -30,6 +32,7 @@ import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAuthIOException;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpEncoding;
 import com.google.api.client.http.HttpRequest;
@@ -50,6 +53,7 @@ import com.google.api.services.sheets.v4.model.Request;
 import com.google.api.services.sheets.v4.model.Sheet;
 import com.google.api.services.sheets.v4.model.Spreadsheet;
 import com.google.api.services.sheets.v4.model.SpreadsheetProperties;
+import com.google.api.services.sheets.v4.model.UpdateValuesResponse;
 import com.google.api.services.sheets.v4.model.ValueRange;
 import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.helper.DateAsXAxisLabelFormatter;
@@ -70,6 +74,8 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Arrays;
+import java.util.Locale;
+import java.util.Random;
 
 import pub.devrel.easypermissions.EasyPermissions;
 
@@ -116,36 +122,26 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         super.onCreate(savedInstanceState);
         setContentView(R.layout.data_layout);
 
+        //Defining declared variables
         mAdView = (AdView) findViewById(R.id.adView);
+        gView = (GraphView) findViewById(R.id.graph);
+        RequestingNewData = false;
+        MultiplePlots = false;
+        //Google Credentials
+        mCredentials = GoogleAccountCredential.usingOAuth2(getApplicationContext(),Arrays.asList(SCOPE)).setBackOff(new ExponentialBackOff());
+        //Progress dialog
+        mProgress = new ProgressDialog(this);
+        //Preference where data is stored
+        mDataPref = getSharedPreferences(DataPreferenceName,Context.MODE_PRIVATE);
+
+
+        //Showing Ad
         AdRequest adRequest = new AdRequest.Builder().addTestDevice("9AED419BE2733780159C7FF112BAE873").build();
         mAdView.loadAd(adRequest);
 
-        /*myDataPref = getSharedPreferences(DataPreferenceName,Context.MODE_PRIVATE);
-        if (myDataPref.getAll() == null) {
-            getAPIResults(MakeRequestTask.LOAD_DATA_FROM_SHEETS);
-        }*/
-
-        //Testing graph View
-        gView = (GraphView) findViewById(R.id.graph);
-        gView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                onGraphClickListener();
-            }
-        });
 
 
-        RequestingNewData = false;
-        MultiplePlots = false;
-        // Getting Account Credentials
-        mCredentials = GoogleAccountCredential.usingOAuth2(getApplicationContext(), Arrays.asList(SCOPE)).setBackOff(new ExponentialBackOff());
-        mProgress = new ProgressDialog(this);
-        //mProgress.setMessage("Calling sheets...");
 
-        LogStoredVals();
-
-        //Loading data file
-        mDataPref = getSharedPreferences(DataPreferenceName,Context.MODE_APPEND);
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
@@ -153,6 +149,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
 
         if (mDataPref.getString(getString(R.string.ActDataTitle),null) == null) {
             mDataPref.edit().putString(getString(R.string.ActDataTitle),getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE).getString("0","NULL")).apply();
+            RequestingNewData = true;
             getAPIResults();
         } else {
             LoadValuesIntoGraphView();
@@ -174,6 +171,8 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
                 if (RequestingNewData) {
                     new MakeRequestTask(mCredentials,MakeRequestTask.LOAD_DATA_FROM_SHEETS).execute();
                     RequestingNewData = false;
+                } else {
+                    new MakeRequestTask(mCredentials,MakeRequestTask.SAVE_TODAYS_VALUES).execute();
                 }
             }
         }
@@ -299,10 +298,22 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     }
     //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
+    //Button Click Methods
+    //##############################################################################################
+    public void GraphSettingsButtonClick(View v) {
+        DialogFragment newFrag = new GraphSettingsFragment();
+        newFrag.show(getFragmentManager(),"ChangeGraphSetting");
+    }
 
-    public void TestButtonClick(View v) {
+    public void NewSpreadSheetClick(View v) {
+        getPreferences(Context.MODE_PRIVATE).edit().remove(getString(R.string.SheetID)).apply();
         getAPIResults();
     }
+
+    public void OnSaveValuesClicked(View v) {
+        getAPIResults();
+    }
+    //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
 
     public void LoadValuesIntoGraphView() {
@@ -319,20 +330,28 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             Date d1 = cal.getTime();
             if (!MultiplePlots) {
                 gView.removeAllSeries();
+                gView.setTitle(title);
+            } else {
+                series.setColor(getRandColor());
+                gView.getLegendRenderer().setVisible(true);
+                gView.setTitle("Comparing time use");
             }
             gView.getViewport().setXAxisBoundsManual(true);
             gView.getViewport().setMinX(d1.getTime());
             gView.getGridLabelRenderer().setLabelFormatter(new DateAsXAxisLabelFormatter(getApplicationContext()));
             gView.getGridLabelRenderer().setNumHorizontalLabels(3);
             for(int i=1;i<limit;i++) {
-                series.appendData(new DataPoint(d1,mDataPref.getInt(Integer.toString(i),0)),true,limit);
+                String key = String.valueOf(i);
+                String storedVal = mDataPref.getString(key,"0.0");
+                series.appendData(new DataPoint(d1,Double.valueOf(storedVal)),true,limit);
                 cal.add(Calendar.DATE,1);
                 d1 = cal.getTime();
 
             }
+
+            series.setTitle(title);
             gView.getViewport().setMaxX(d1.getTime());
             gView.addSeries(series);
-            gView.setTitle(title);
             gView.setTitleTextSize(100);
             gView.getGridLabelRenderer().setHorizontalAxisTitle("Date");
             gView.getGridLabelRenderer().setVerticalAxisTitle("Time in Hours");
@@ -342,11 +361,6 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         }
     }
 
-
-    public void onGraphClickListener() {
-        DialogFragment newFrag = new GraphSettingsFragment();
-        newFrag.show(getFragmentManager(),"Add Activity");
-    }
 
     //Private Class
     private class MakeRequestTask extends AsyncTask<Void,Void,List<String>> {
@@ -409,7 +423,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         private List<String> requestNewSheet() throws IOException,GeneralSecurityException {
             Spreadsheet requestSheet = new Spreadsheet();
             SpreadsheetProperties shProp = new SpreadsheetProperties();
-            shProp.set("title",("DailyTimeUsage:     DateCreated:").concat(new SimpleDateFormat("yyyy-MM-dd").format(Calendar.getInstance().getTime())));
+            shProp.set("title",("DailyTimeUsage:     DateCreated:").concat(new SimpleDateFormat("yyyy-MM-dd").format(Calendar.getInstance(Locale.US).getTime())));
             requestSheet.setProperties(shProp);
 
             HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();
@@ -445,7 +459,65 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             AppendValuesResponse ap = this.mService.spreadsheets().values().append(sheetID,"A1",newVals).setValueInputOption("RAW").execute();
         }
 
-        private List<String> saveValues() {
+        private List<String> saveValues() throws Exception {
+            ValueRange newActVal = new ValueRange();
+            List<Object> newAct = new ArrayList<>();
+
+            ValueRange titles = mService.spreadsheets().values().get(sheetID,"A1:Z").execute();
+
+            SharedPreferences pref = getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE);
+            int limit = pref.getInt(getString(R.string.TotalNumberActivity),0);
+
+            for (int i = 0; i<limit;i++) {
+                String val = pref.getString(Integer.toString(i),null);
+                if (val != null && !titles.getValues().get(0).contains(val)){
+                    newAct.add(val);
+                }
+            }
+
+            if (!newAct.isEmpty()) {
+                List<List<Object>> vals = new ArrayList<>();
+                String range = getAlphabetVal(titles.getValues().get(0).size()).concat("1");
+                int limit2 = titles.getValues().size();
+                int limitcol = newAct.size();
+                List<Object> zeroVal = new ArrayList<>();
+                for (int i = 0;i<limitcol;i++) {zeroVal.add(0);}
+                vals.add(newAct);
+                for (int i = 0;i<limit2-1;i++) {vals.add(zeroVal);}
+                newActVal.setValues(vals);
+                newActVal.setMajorDimension("ROWS");
+                UpdateValuesResponse result = mService.spreadsheets().values().update(sheetID,range,newActVal).setValueInputOption("RAW").execute();
+            }
+
+            titles = mService.spreadsheets().values().get(sheetID,"A1:Z").execute();
+            limit = titles.getValues().get(0).size(); //pref.getInt(getString(R.string.TotalNumberActivity),0);
+            Log.d("#####LIMIT DSFSD",Integer.toString(limit));
+
+            List<Object> times = new ArrayList<>();
+            for (int i = 0; i<limit;i++) {times.add(0);}
+            for (int i = 0; i<limit;i++) {
+                String actName = pref.getString(Integer.toString(i), null);
+                if (actName != null && titles.getValues().get(0).contains(actName)) {
+                    int index = titles.getValues().get(0).indexOf(actName);
+                    times.set(index, pref.getString(actName.concat(getString(R.string.time)), "0"));
+
+                }
+            }
+
+            String curDate = new SimpleDateFormat("yyy.MM.dd").format(Calendar.getInstance(Locale.US).getTime());
+            String dateOnSheet = (String) titles.getValues().get(titles.getValues().size()).get(0);
+
+            times.set(0,new SimpleDateFormat("yyyy.MM.dd").format(Calendar.getInstance(Locale.US).getTime()));
+
+            List<List<Object>> vals = new ArrayList<>();
+            vals.add(times);
+            newActVal.clear();
+            newActVal.setValues(vals);
+            newActVal.setMajorDimension("ROWS");
+
+            if (!curDate.equals(dateOnSheet)) {
+                AppendValuesResponse result = mService.spreadsheets().values().append(sheetID, "A2", newActVal).setValueInputOption("RAW").execute();
+            }
             return null;
         }
 
@@ -458,6 +530,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             for (int i=0;i<limit;i++) {
                 if (( titles.get(i)).equals(RequestedActivity)) {
                     col = i;
+                    break;
                 }
             }
 
@@ -471,7 +544,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             DataPrefEditor.putInt(getString(R.string.DataSize),limit);
             for(int i=1;i<limit;i++) {
                 Log.d("######",(String) range.getValues().get(i).get(col));
-                DataPrefEditor.putInt(Integer.toString(i),Integer.parseInt((String) range.getValues().get(i).get(col)));
+                DataPrefEditor.putString(String.valueOf(i),String.valueOf(range.getValues().get(i).get(col)));
             }
             DataPrefEditor.apply();
             LoadValuesIntoGraphView();
@@ -489,38 +562,18 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             mProgress.dismiss();
         }
 
-
     }
 
-    //Random Dialog launcher
-    private void LaunchDialogWithMessage(String Message) {
-        AlertDialog.Builder builder = new  AlertDialog.Builder(DataActivity.this);
-        builder.setTitle("Exception");
-        builder.setMessage(Message);
-
-        builder.setNegativeButton("Dismiss", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog,int which) {
-                dialog.dismiss();
-            }
-        });
-
-        Dialog dialog = builder.create();
-        dialog.show();
+    public float getTimeInHours(String Val) {
+        float hour = Float.parseFloat(Val.substring(0,2));
+        Log.d("########FLOAT",Float.toString(hour));
+        return hour;
     }
 
-
-
-    //Helper Vars
-    public void LogStoredVals() {
-        SharedPreferences pref = getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE);
-        int limit = pref.getInt(getString(R.string.TotalNumberActivity),-1);
-        Log.d("#####Tot",Integer.toString(limit));
-        for (int i=0;i<limit;i++) {
-            Log.d("#####ACT",pref.getString(Integer.toString(i),null));
-        }
+    public int getRandColor() {
+        Random rand = new Random();
+        return Color.argb(255,rand.nextInt(256),rand.nextInt(256),rand.nextInt(256));
     }
-
 
     //GraphSettingListenerImplemntation
     @Override
