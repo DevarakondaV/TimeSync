@@ -88,8 +88,10 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     private AdView mAdView;
     private GraphView gView;
     private Boolean RequestingNewData;
-    private String CurDataTitle;
     private Boolean MultiplePlots;
+    SharedPreferences mDataPref;
+    SharedPreferences.Editor DataPrefEditor;
+    private static final String [] SCOPE = {SheetsScopes.SPREADSHEETS};
 
     @Override
     public void onPermissionsGranted(int myInt, List<String> SList) {}
@@ -99,23 +101,19 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     GoogleAccountCredential mCredentials;
     ProgressDialog mProgress;
     private static final String PREF_ACCOUNT_NAME = "accountName";
-
+    static String DataPreferenceName = "DataPref";
     static final int REQUEST_AUTHORIZATION = 1001;
     static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_PERMISSION_GET_ACCOUNT = 1003;
 
 
-    static String DataPreferenceName = "DataPref";
-    SharedPreferences mDataPref;
-    SharedPreferences.Editor DataPrefEditor;
 
     /**
      * ATTENTION: This was auto-generated to implement the App Indexing API.
      * See https://g.co/AppIndexing/AndroidStudio for more information.
      */
     private GoogleApiClient client;
-    private static final String [] SCOPE = {SheetsScopes.SPREADSHEETS};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -138,7 +136,6 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         //Showing Ad
         AdRequest adRequest = new AdRequest.Builder().addTestDevice("9AED419BE2733780159C7FF112BAE873").build();
         mAdView.loadAd(adRequest);
-
 
 
 
@@ -306,8 +303,23 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     }
 
     public void NewSpreadSheetClick(View v) {
-        getPreferences(Context.MODE_PRIVATE).edit().remove(getString(R.string.SheetID)).apply();
-        getAPIResults();
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                getPreferences(Context.MODE_PRIVATE).edit().remove(getString(R.string.SheetID)).apply();
+                getAPIResults();
+            }
+        });
+        builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+        builder.setTitle("Warning");
+        builder.setMessage("Creating new spreadsheet means you will lose all data from previous dates. Create a new spreadsheet if current sheet runs out of space or you want to reset data values.");
+        builder.show();
     }
 
     public void OnSaveValuesClicked(View v) {
@@ -335,6 +347,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
                 series.setColor(getRandColor());
                 gView.getLegendRenderer().setVisible(true);
                 gView.setTitle("Comparing time use");
+                gView.getLegendRenderer().setBackgroundColor(Color.WHITE);
             }
             gView.getViewport().setXAxisBoundsManual(true);
             gView.getViewport().setMinX(d1.getTime());
@@ -423,7 +436,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         private List<String> requestNewSheet() throws IOException,GeneralSecurityException {
             Spreadsheet requestSheet = new Spreadsheet();
             SpreadsheetProperties shProp = new SpreadsheetProperties();
-            shProp.set("title",("DailyTimeUsage:     DateCreated:").concat(new SimpleDateFormat("yyyy-MM-dd").format(Calendar.getInstance(Locale.US).getTime())));
+            shProp.set("title",("DailyTimeUsage:     DateCreated:").concat(new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(Calendar.getInstance(Locale.US).getTime())));
             requestSheet.setProperties(shProp);
 
             HttpTransport httpTransport = AndroidHttp.newCompatibleTransport();
@@ -499,15 +512,15 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
                 String actName = pref.getString(Integer.toString(i), null);
                 if (actName != null && titles.getValues().get(0).contains(actName)) {
                     int index = titles.getValues().get(0).indexOf(actName);
-                    times.set(index, pref.getString(actName.concat(getString(R.string.time)), "0"));
+                    times.set(index, getTimeInHours(pref.getString(actName.concat(getString(R.string.time)), "0")));
 
                 }
             }
 
-            String curDate = new SimpleDateFormat("yyy.MM.dd").format(Calendar.getInstance(Locale.US).getTime());
+            String curDate = new SimpleDateFormat("yyy.MM.dd",Locale.US).format(Calendar.getInstance(Locale.US).getTime());
             String dateOnSheet = (String) titles.getValues().get(titles.getValues().size()).get(0);
 
-            times.set(0,new SimpleDateFormat("yyyy.MM.dd").format(Calendar.getInstance(Locale.US).getTime()));
+            times.set(0,new SimpleDateFormat("yyyy.MM.dd",Locale.US).format(Calendar.getInstance(Locale.US).getTime()));
 
             List<List<Object>> vals = new ArrayList<>();
             vals.add(times);
@@ -564,10 +577,17 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
 
     }
 
-    public float getTimeInHours(String Val) {
-        float hour = Float.parseFloat(Val.substring(0,2));
-        Log.d("########FLOAT",Float.toString(hour));
-        return hour;
+    public double getTimeInHours(String Val) {
+        double totalHour;
+        double hour = Double.valueOf(Val.substring(0,2));
+        double min = Double.valueOf(Val.substring(3,5));
+        double sec = Double.valueOf(Val.substring(6));
+
+
+        totalHour = hour+(min/60)+(sec/3600);
+        String val = String.format("%.2f",totalHour);
+        totalHour = Double.valueOf(val);
+        return totalHour;
     }
 
     public int getRandColor() {
