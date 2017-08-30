@@ -14,6 +14,8 @@ import android.widget.ArrayAdapter;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import java.io.IOException;
+import java.sql.Time;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -33,11 +35,12 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
     private ArrayList<Boolean> Enable = new ArrayList<>();
 
 
-    private long MillisecondTime, StartTime, TimeBuff, UpdateTime = 0L;
+    private long MillisecondTime, StartTime, TimeBuff, UpdateTime = 0L, UpdateTime2 = 0L;
     private int Seconds, Minutes, Hours, MilliSeconds;
 
     private Handler myHandler = new Handler();
-
+    private Runnable CountRunnable;
+    private Thread CountThread;
     private SharedPreferences sharedPref;
 
     public CustomListAdapter(Context context, int resource, int textViewResourceId, List<Main2Activity.myNode> OBJECTS) {
@@ -109,8 +112,10 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
                     Log.d("#####","Changing to uncheck");
                     State.set(index,false);
                     EnableAll();
+                    Log.d("CLICKTIME",TimeTexts.get(index));
+                    notifyDataSetChanged();
                 }
-                notifyDataSetChanged();
+                //notifyDataSetChanged();
             }
         });
 
@@ -135,40 +140,41 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
 
     private void switchSelected(final int index){
         if (State.get(index) && Enable.get(index)) {
-            Runnable CountRunnable = new Runnable() {
+            CountRunnable = new Runnable() {
                 @Override
                 public void run() {
                     StartRunning(index);
                 }
             };
-            Thread countThread = new Thread(CountRunnable);
-            countThread.start();
+            //AsyncTask.execute(CountRunnable);
+            CountThread = new Thread(CountRunnable);
+            CountThread.start();
         }
     }
 
     private void StartRunning(final int index) {
-        sharedPref = getContext().getSharedPreferences(getContext().getString(R.string.SharedPref),Context.MODE_PRIVATE);
-        StartTime = sharedPref.getLong("StartTime",0);
-        UpdateTime = sharedPref.getLong("UpdateTime",0);
+        sharedPref = getContext().getSharedPreferences(getContext().getString(R.string.SharedPref), Context.MODE_PRIVATE);
+        StartTime = sharedPref.getLong("StartTime", 0);
+        //UpdateTime = sharedPref.getLong("UpdateTime", 0);
+        UpdateTime = returnSeconds(TimeTexts.get(index))*1000;
         if (!arestatesfalse()) {
             StartTime = SystemClock.uptimeMillis();
             UpdateTime = returnSeconds(TimeTexts.get(index)) * 1000;
         }
-        Log.d("######",Long.toString(Thread.currentThread().getId()));
-        while(State.get(index)) {
+        Log.d("######", Long.toString(Thread.currentThread().getId()));
+        while (State.get(index)) {
             MillisecondTime = UpdateTime + SystemClock.uptimeMillis() - StartTime;
-
 
             Seconds = (int) (MillisecondTime / 1000);
             Minutes = Seconds / 60;
-            Hours = Minutes/60;
+            Hours = Minutes / 60;
             Seconds = Seconds % 60;
             Minutes = Minutes % 60;
             Hours = Hours % 60;
+            TimeTexts.set(index, "" + String.format(Locale.US, "%02d", Hours) + ":"
+                    + String.format(Locale.US, "%02d", Minutes) + ":"
+                    + String.format(Locale.US, "%02d", Seconds));
 
-            TimeTexts.set(index,""+ String.format(Locale.US,"%02d",Hours) +":"
-                    + String.format(Locale.US,"%02d",Minutes) + ":"
-                    + String.format(Locale.US,"%02d",Seconds));
 
 
             try {
@@ -177,6 +183,7 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
                 e.printStackTrace();
             }
 
+            Log.d(TimeTexts.get(index)," ");
             myHandler.post(callnotify);
         }
         StartTime = 0;
@@ -194,12 +201,23 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         Activity act = (Activity) getContext();
         if (act != null) {
             TextView total = (TextView) act.findViewById(R.id.TimeTotal);
+
             int sumSec = 0;
             int limit = TimeTexts.size()-2;
             for (int i = 0;i<limit;i=i+3) {
                 sumSec = sumSec+returnSeconds(TimeTexts.get(i));
                 sumSec = sumSec+returnSeconds(TimeTexts.get(i+1));
                 sumSec = sumSec+returnSeconds(TimeTexts.get(i+2));
+            }
+
+            switch(TimeTexts.size() % 3) {
+                case 1:
+                    sumSec = sumSec+returnSeconds(TimeTexts.get(TimeTexts.size()-1));
+                    break;
+                case 2:
+                    sumSec = sumSec+returnSeconds(TimeTexts.get(TimeTexts.size()-1));
+                    sumSec = sumSec+returnSeconds(TimeTexts.get(TimeTexts.size()-2));
+                    break;
             }
 
             int min = sumSec / 60;
@@ -241,6 +259,7 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
                 Enable.set(i,false);
             }
         }
+
     }
 
     private void EnableAll() {

@@ -234,6 +234,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     public void onPause() {
         super.onPause();
         StoreVals();
+        Log.d("PAUSED THREAD COUNT",Integer.toString(Thread.activeCount()));
     }
 
     private void StoreVals() {
@@ -261,6 +262,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
 
         PrefEditor.putLong("StartTime", myAdapter.returnStartTime());
         PrefEditor.putLong("UpdateTime", myAdapter.returnUpdateTime());
+        PrefEditor.putString("TotalTime",(String) totalTime.getText());
         PrefEditor.apply();
         NodesArray.clear();
     }
@@ -293,20 +295,36 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         int limit = sharedPref.getInt(getString(R.string.TotalNumberActivity),-1);
         Log.d("#####LimitWhenLoad",Integer.toString(limit));
         String pos;
-        for(int i = 0;i<limit;i++) {
-            pos = Integer.toString(i);
-            myNode newNode = new myNode();
-            newNode.SwitchString = sharedPref.getString(pos,"None");
-            newNode.TextString = sharedPref.getString(newNode.SwitchString.concat(getString(R.string.time)),INITIAL_SETTING);
-            newNode.enable = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.enable)),false);
-            newNode.state = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.state)),false);
-            if (newNode.state) {
-                checked = i;
+        if (NodesArray.isEmpty()) {
+            for (int i=0;i<limit;i++) {
+                pos = Integer.toString(i);
+                myNode newNode = new myNode();
+                newNode.SwitchString = sharedPref.getString(pos,"None");
+                newNode.TextString = sharedPref.getString(newNode.SwitchString.concat(getString(R.string.time)),INITIAL_SETTING);
+                newNode.enable = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.enable)),false);
+                newNode.state = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.state)),false);
+                NodesArray.add(newNode);
             }
-            NodesArray.add(newNode);
+            myAdapter = new CustomListAdapter(Main2Activity.this,R.layout.listviewlayout,Stored_LV.getId(),NodesArray);
+            Stored_LV.setAdapter(myAdapter);
+        } else {
+            /*
+            for (int i = 0; i < limit; i++) {
+                pos = Integer.toString(i);
+                NodesArray.get(i).SwitchString = sharedPref.getString(pos, "None");
+                NodesArray.get(i).TextString = sharedPref.getString(NodesArray.get(i).SwitchString.concat(getString(R.string.time)), INITIAL_SETTING);
+                NodesArray.get(i).enable = sharedPref.getBoolean(NodesArray.get(i).SwitchString.concat(getString(R.string.enable)), false);
+                NodesArray.get(i).state = sharedPref.getBoolean(NodesArray.get(i).SwitchString.concat(getString(R.string.state)), false);
+                if (NodesArray.get(i).state) {
+                    checked = i;
+                }
+
+            }*/
         }
+        totalTime.setText(sharedPref.getString("TotalTime",INITIAL_SETTING));
         return checked;
     }
+
 
     @Override
     public void onStop() {
@@ -330,11 +348,12 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         } else {
             checked = LoadStoredVals();
         }
-        updateListViewAdapter();
+        //updateListViewAdapter();
 
 
         if (checked != -1) {
-            myAdapter.resumeChecked(checked);
+            //myAdapter.resumeChecked(checked);
         }
+        Log.d("THREAD COUNT", Integer.toString(Thread.activeCount()));
     }
 }
