@@ -26,6 +26,7 @@ import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.os.Handler;
+import android.widget.Toast;
 
 import com.google.android.gms.appindexing.Action;
 import com.google.android.gms.appindexing.AppIndex;
@@ -82,16 +83,11 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main2);
 
-        //String[] itemname = {"Social","Class","Homework","Other","ECWork","Hello","Strings","Helloword"};
 
         sharedPref = getApplicationContext().getSharedPreferences(getString(R.string.SharedPref),Context.MODE_PRIVATE);
 
-        //InsertStandardNodes();
-
         Stored_LV = (ListView) findViewById(R.id.ActivitiesList);
         totalTime = (TextView) findViewById(R.id.TimeTotal);
-        //myAdapter = new CustomListAdapter(this,R.layout.listviewlayout,Stored_LV.getId(),NodesArray);
-        //Stored_LV.setAdapter(myAdapter);
 
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
@@ -119,9 +115,8 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     }
 
     private void addNewActivity() {
-        DialogFragment newFragment = new AddActivityFragment();
-        newFragment.show(getFragmentManager(),"Add Activity");
-        //newFragment.getDialog().setTitle("Add New Activity");
+        DialogFragment newFragmet = new AddActivityFragment();
+        newFragmet.show(getFragmentManager(),"Add Activity");
     }
 
     private void callTotalsActivity() {
@@ -136,7 +131,8 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
             NodesArray.get(i).enable = true;
             NodesArray.get(i).TextString = INITIAL_SETTING;
         }
-        updateListViewAdapter();
+        myAdapter.clearAll();
+        //updateListViewAdapter();
         totalTime.setText(INITIAL_SETTING);
     }
 
@@ -180,7 +176,9 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         newNode.TextString = INITIAL_SETTING;
         newNode.SwitchString = myFrag.getETxTInput();
         NodesArray.add(newNode);
-        updateListViewAdapter();
+
+        myAdapter.AddNewElement(newNode);
+        myAdapter.notifyDataSetChanged();
         dialog.dismiss();
     }
 
@@ -193,10 +191,13 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     public void onRemoveActivityDialogPositiveClick(DialogFragment dialog) {
         RemoveActivityFragment myFrag = (RemoveActivityFragment) dialog;
         String removeAct = myFrag.getSelectedActivity();
-        Log.d("#####",removeAct);
+
         int index = getIndexOfNode(removeAct);
-        NodesArray.remove(index);
-        updateListViewAdapter();
+        //NodesArray.remove(index);
+        if (myAdapter.RemoveElement(removeAct)) {
+            NodesArray.remove(index);
+        }
+        dialog.dismiss();
     }
 
     @Override
@@ -234,7 +235,6 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     public void onPause() {
         super.onPause();
         StoreVals();
-        Log.d("PAUSED THREAD COUNT",Integer.toString(Thread.activeCount()));
     }
 
     private void StoreVals() {
@@ -264,16 +264,11 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         PrefEditor.putLong("UpdateTime", myAdapter.returnUpdateTime());
         PrefEditor.putString("TotalTime",(String) totalTime.getText());
         PrefEditor.apply();
-        NodesArray.clear();
     }
 
 
     private void LoadDefaults() {
         if (!NodesArray.isEmpty()) {NodesArray.clear();}
-        //PrefEditor = sharedPref.edit();
-        //PrefEditor.clear();
-        //PrefEditor.putBoolean(getString(R.string.SetDefault),true);
-        //PrefEditor.commit();
 
         myNode N1,N2,N3,N4,N5,N6,N7,N8;
         N1 = new myNode(); N1.SwitchString = "Social";N1.TextString = INITIAL_SETTING;N1.enable = true; N1.state = false;
@@ -285,9 +280,10 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         N7 = new myNode(); N7.SwitchString = "Work";N7.TextString = INITIAL_SETTING;N7.enable = true; N7.state = false;
         N8 = new myNode(); N8.SwitchString = "Other";N8.TextString = INITIAL_SETTING;N8.enable = true; N8.state = false;
 
-        //NodesArray.add(0,N1);
+
         NodesArray.add(N1);NodesArray.add(N2);NodesArray.add(N3);NodesArray.add(N4);
         NodesArray.add(N5);NodesArray.add(N6);NodesArray.add(N7);NodesArray.add(N8);
+        updateListViewAdapter();
     }
 
     private int LoadStoredVals() {
@@ -308,7 +304,6 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
             myAdapter = new CustomListAdapter(Main2Activity.this,R.layout.listviewlayout,Stored_LV.getId(),NodesArray);
             Stored_LV.setAdapter(myAdapter);
         } else {
-            /*
             for (int i = 0; i < limit; i++) {
                 pos = Integer.toString(i);
                 NodesArray.get(i).SwitchString = sharedPref.getString(pos, "None");
@@ -319,7 +314,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
                     checked = i;
                 }
 
-            }*/
+            }
         }
         totalTime.setText(sharedPref.getString("TotalTime",INITIAL_SETTING));
         return checked;
@@ -348,12 +343,6 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
         } else {
             checked = LoadStoredVals();
         }
-        //updateListViewAdapter();
 
-
-        if (checked != -1) {
-            //myAdapter.resumeChecked(checked);
-        }
-        Log.d("THREAD COUNT", Integer.toString(Thread.activeCount()));
     }
 }

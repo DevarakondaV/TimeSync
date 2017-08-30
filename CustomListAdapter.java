@@ -81,6 +81,8 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
             holder.TimeSwitch.setOnCheckedChangeListener(null);
         }
 
+
+
         holder.TimeSwitch.setText(Switches.get(position));
         holder.TimeSwitch.setClickable(false);
         holder.TimeSwitch.setFocusable(false);
@@ -119,6 +121,7 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
             }
         });
 
+
         return mView;
     }
 
@@ -133,9 +136,6 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         }
     }
 
-    public void resumeChecked(int index) {
-        switchSelected(index);
-    }
 
 
     private void switchSelected(final int index){
@@ -282,7 +282,7 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         return UpdateTime;
     }
 
-    private boolean arestatesfalse() {
+    public boolean arestatesfalse() {
         int limit = State.size();
         boolean rtnstate = true;
         for (int i = 0; i < limit; i++) {
@@ -292,5 +292,44 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         }
         return rtnstate;
     }
+
+    public void AddNewElement(Object Value) {
+        Main2Activity.myNode Val = (Main2Activity.myNode) Value;
+        Switches.add(Val.SwitchString);
+        TimeTexts.add(Val.TextString);
+        State.add(Val.state);
+        if (!arestatesfalse()) {
+            Enable.add(false);
+        } else {
+            Enable.add(Val.enable);
+        }
+    }
+
+    public Boolean RemoveElement(Object Value) {
+        Boolean removed = false;
+        String Val = (String) Value;
+        Log.d("#####",Val);
+        int index = getIndex(Val);
+        if (!State.get(index)) {
+            Switches.remove(index);
+            TimeTexts.remove(index);
+            State.remove(index);
+            Enable.remove(index);
+            notifyDataSetChanged();
+            removed = true;
+        }
+        return removed;
+    }
+
+    public void clearAll() {
+        int limit = Switches.size();
+        for (int i = 0;i<limit;i++) {
+            State.set(i,false);
+            Enable.set(i,true);
+            TimeTexts.set(i,"00:00:00");
+        }
+        notifyDataSetChanged();
+    }
+
 
 }

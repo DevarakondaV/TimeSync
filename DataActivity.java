@@ -16,10 +16,13 @@ import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.v4.app.FragmentActivity;
 import android.support.v7.app.AlertDialog;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Toast;
 
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.AdSize;
@@ -27,12 +30,18 @@ import com.google.android.gms.ads.AdView;
 import com.google.android.gms.appindexing.Action;
 import com.google.android.gms.appindexing.AppIndex;
 import com.google.android.gms.appindexing.Thing;
+import com.google.android.gms.auth.api.credentials.Credential;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.common.api.Api;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.Status;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAuthIOException;
+import com.google.api.client.googleapis.extensions.android.gms.auth.GooglePlayServicesAvailabilityIOException;
+import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpEncoding;
 import com.google.api.client.http.HttpRequest;
@@ -62,8 +71,10 @@ import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 
 
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.GeneralSecurityException;
@@ -76,6 +87,7 @@ import java.util.List;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 import pub.devrel.easypermissions.EasyPermissions;
 
@@ -101,13 +113,15 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
     GoogleAccountCredential mCredentials;
     ProgressDialog mProgress;
     private static final String PREF_ACCOUNT_NAME = "accountName";
+    private static final String clientID = "191547779933-o8t1qhvpkfngsbt1qa3tdui1kdpjlfgd.apps.googleusercontent.com";
     static String DataPreferenceName = "DataPref";
     static final int REQUEST_AUTHORIZATION = 1001;
     static final int REQUEST_GOOGLE_PLAY_SERVICES = 1002;
     static final int REQUEST_ACCOUNT_PICKER = 1000;
     static final int REQUEST_PERMISSION_GET_ACCOUNT = 1003;
 
-
+    private GoogleApiClient sheetsClient;
+    private AccountManager mAccount;
 
     /**
      * ATTENTION: This was auto-generated to implement the App Indexing API.
@@ -240,6 +254,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             }
         } else {
             EasyPermissions.requestPermissions(this,"This app needs to access your Google account",REQUEST_PERMISSION_GET_ACCOUNT,Manifest.permission.GET_ACCOUNTS);
+            getAPIResults();
         }
     }
 
@@ -383,6 +398,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
 
         private int COMMAND;
 
+        static final int REQUEST_PERMISSION = 1010;
         static final int REQUEST_NEW_SHEET = 1004;
         static final int SAVE_TODAYS_VALUES = 1005;
         static final int LOAD_DATA_FROM_SHEETS = 1006;
@@ -400,10 +416,14 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         protected List<String> doInBackground(Void... params) {
             try {
                 return getResultsFromSheets();
+            } catch (UserRecoverableAuthIOException e) {
+                startActivityForResult(e.getIntent(),REQUEST_AUTHORIZATION);
+                cancel(true);
+                return null;
             } catch (Exception e) {
                 mLastError = e;
                 mProgress.dismiss();
-                Log.d("EXCEPTION", e.getMessage());
+                runOnUiThread(displayExceptionMessage(e));
                 cancel(true);
                 return null;
             }
@@ -472,7 +492,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             AppendValuesResponse ap = this.mService.spreadsheets().values().append(sheetID,"A1",newVals).setValueInputOption("RAW").execute();
         }
 
-        private List<String> saveValues() throws Exception {
+        private List<String> saveValues() throws IOException {
             ValueRange newActVal = new ValueRange();
             List<Object> newAct = new ArrayList<>();
 
@@ -518,7 +538,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             }
 
             String curDate = new SimpleDateFormat("yyy.MM.dd",Locale.US).format(Calendar.getInstance(Locale.US).getTime());
-            String dateOnSheet = (String) titles.getValues().get(titles.getValues().size()).get(0);
+            String dateOnSheet = (String) titles.getValues().get(titles.getValues().size()-1).get(0);
 
             times.set(0,new SimpleDateFormat("yyyy.MM.dd",Locale.US).format(Calendar.getInstance(Locale.US).getTime()));
 
@@ -534,7 +554,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
             return null;
         }
 
-        private List<String> loadDataFromSheets(String RequestedActivity) throws Exception {
+        private List<String> loadDataFromSheets(String RequestedActivity) throws IOException {
             int col = -1;
             int limit;
             ValueRange range = mService.spreadsheets().values().get(sheetID,"A1:Z").execute();
@@ -573,6 +593,21 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
         @Override
         protected void onPostExecute(List<String> output) {
             mProgress.dismiss();
+        }
+
+        private Runnable displayExceptionMessage(final Exception e) {
+            Runnable runnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (e.getMessage() != null) {
+                        Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                    if (e.getCause().getMessage() != null) {
+                        Toast.makeText(getApplicationContext(), e.getCause().getMessage(),Toast.LENGTH_SHORT).show();
+                    }
+                }
+            };
+            return runnable;
         }
 
     }
@@ -633,6 +668,7 @@ public class DataActivity extends Activity implements EasyPermissions.Permission
                 .setActionStatus(Action.STATUS_TYPE_COMPLETED)
                 .build();
     }
+
 
     @Override
     public void onPause() {
