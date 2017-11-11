@@ -44,6 +44,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.SortedMap;
 
+
 public class Main2Activity extends AppCompatActivity implements AddActivityFragment.AddActivityFragmentListener, RemoveActivityFragment.RemoveActivityFragmentListener {
 
     /**
@@ -88,6 +89,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
 
         Stored_LV = (ListView) findViewById(R.id.ActivitiesList);
         totalTime = (TextView) findViewById(R.id.TimeTotal);
+        //this.moveTaskToBack(true);
 
 
         // ATTENTION: This was auto-generated to implement the App Indexing API.
@@ -111,6 +113,8 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
             case R.id.TotalButton:
                 callTotalsActivity();
                 break;
+            case R.id.TotalAllButton:
+                TotalTimes();
         }
     }
 
@@ -122,6 +126,28 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     private void callTotalsActivity() {
         Intent newAct = new Intent(Main2Activity.this,DataActivity.class);
         startActivity(newAct);
+    }
+
+    private void TotalTimes() {
+        int limit=NodesArray.size();
+        String Sstring;
+        String Tstring;
+        int totalS = 0;
+        int minutes;
+        int hours;
+        for(int i=0;i<limit;i++) {
+            Sstring = NodesArray.get(i).SwitchString;
+            Tstring = (String) myAdapter.requestVal(i,getString(R.string.time));
+            totalS = totalS+myAdapter.returnSeconds(Tstring);
+        }
+        minutes = totalS/60;
+        hours = minutes/60;
+        totalS = totalS%60;
+        minutes = minutes%60;
+        hours = hours%60;
+        totalTime.setText("" + String.format(Locale.US, "%02d", hours) + ":"
+                + String.format(Locale.US, "%02d", minutes) + ":"
+                + String.format(Locale.US, "%02d", totalS));
     }
 
     private void ClearAll() {
@@ -262,6 +288,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
 
         PrefEditor.putLong("StartTime", myAdapter.returnStartTime());
         PrefEditor.putLong("UpdateTime", myAdapter.returnUpdateTime());
+        Log.d("StartTime",String.valueOf(myAdapter.returnStartTime()));
         PrefEditor.putString("TotalTime",(String) totalTime.getText());
         PrefEditor.apply();
     }
@@ -299,6 +326,9 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
                 newNode.TextString = sharedPref.getString(newNode.SwitchString.concat(getString(R.string.time)),INITIAL_SETTING);
                 newNode.enable = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.enable)),false);
                 newNode.state = sharedPref.getBoolean(newNode.SwitchString.concat(getString(R.string.state)),false);
+                if (newNode.state == true) {
+                    checked = i;
+                }
                 NodesArray.add(newNode);
             }
             myAdapter = new CustomListAdapter(Main2Activity.this,R.layout.listviewlayout,Stored_LV.getId(),NodesArray);
@@ -310,9 +340,9 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
                 NodesArray.get(i).TextString = sharedPref.getString(NodesArray.get(i).SwitchString.concat(getString(R.string.time)), INITIAL_SETTING);
                 NodesArray.get(i).enable = sharedPref.getBoolean(NodesArray.get(i).SwitchString.concat(getString(R.string.enable)), false);
                 NodesArray.get(i).state = sharedPref.getBoolean(NodesArray.get(i).SwitchString.concat(getString(R.string.state)), false);
-                if (NodesArray.get(i).state) {
-                    checked = i;
-                }
+                //if (NodesArray.get(i).state) {
+                    //checked = i;
+                //}
 
             }
         }
@@ -324,7 +354,7 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
     @Override
     public void onStop() {
         super.onStop();
-
+        Log.d("######","on Stop called");
         // ATTENTION: This was auto-generated to implement the App Indexing API.
         // See https://g.co/AppIndexing/AndroidStudio for more information.
         AppIndex.AppIndexApi.end(client, getIndexApiAction());
@@ -342,7 +372,16 @@ public class Main2Activity extends AppCompatActivity implements AddActivityFragm
             sharedPref.edit().putBoolean("FirstRun",false).apply();
         } else {
             checked = LoadStoredVals();
+            if (checked != -1) {
+                myAdapter.StartTime = sharedPref.getLong("StartTime", 0);
+                myAdapter.storedIndex = checked;
+                myAdapter.switchSelected(checked);
+            }
         }
 
+    }
+
+    public ListView getStored_LV(){
+        return Stored_LV;
     }
 }

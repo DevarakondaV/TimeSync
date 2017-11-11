@@ -1,18 +1,25 @@
 package com.impactapp.vishnu.timesync;
 
 import android.app.Activity;
+import android.content.AsyncTaskLoader;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.support.v4.view.TintableBackgroundView;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.ListView;
 import android.widget.Switch;
 import android.widget.TextView;
+
+import com.google.android.gms.common.api.Result;
+
+import org.w3c.dom.Text;
 
 import java.io.IOException;
 import java.sql.Time;
@@ -34,13 +41,21 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
     private ArrayList<Boolean> State = new ArrayList<>();
     private ArrayList<Boolean> Enable = new ArrayList<>();
 
+    private Main2Activity act;
+    private ListView LV;
+    private View TouchedViewChild;
+    private TextView TouchedTV;
 
-    private long MillisecondTime, StartTime, TimeBuff, UpdateTime = 0L, UpdateTime2 = 0L;
+
+    private long MillisecondTime, TimeBuff, UpdateTime = 0L, UpdateTime2 = 0L;
     private int Seconds, Minutes, Hours, MilliSeconds;
+    private int TotSec;
+    public int storedIndex;
+    public long StartTime;
+    private String UpdateTimeValue;
 
     private Handler myHandler = new Handler();
     private Runnable CountRunnable;
-    private Thread CountThread;
     private SharedPreferences sharedPref;
 
     public CustomListAdapter(Context context, int resource, int textViewResourceId, List<Main2Activity.myNode> OBJECTS) {
@@ -56,9 +71,9 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         }
         id = resource;
         mContext = context;
+        act = (Main2Activity) mContext;
+        LV = act.getStored_LV();
     }
-
-
 
     @Override
     public View getView(int position, View v, ViewGroup parent) {
@@ -108,8 +123,9 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
                     State.set(index,true);
                     disableAll(index);
                     notifyDataSetChanged();
+                    storedIndex = index;
+                    StartTime = SystemClock.uptimeMillis();
                     switchSelected(index);
-                    Log.d("######","State Checked");
                 } else {
                     Log.d("#####","Changing to uncheck");
                     State.set(index,false);
@@ -117,10 +133,8 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
                     Log.d("CLICKTIME",TimeTexts.get(index));
                     notifyDataSetChanged();
                 }
-                //notifyDataSetChanged();
             }
         });
-
 
         return mView;
     }
@@ -136,9 +150,18 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
         }
     }
 
+    public void updateView(int index, String up) {
+        Main2Activity act = (Main2Activity) mContext;
+        View v = act.getStored_LV().getChildAt(index-act.getStored_LV().getFirstVisiblePosition());
 
+        if (v == null)
+            return;
 
-    private void switchSelected(final int index){
+        TextView Tx = (TextView) v.findViewById(R.id.TextViewTime);
+        Tx.setText(up);
+    }
+
+    public void switchSelected(final int index){
         if (State.get(index) && Enable.get(index)) {
             CountRunnable = new Runnable() {
                 @Override
@@ -146,24 +169,34 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
                     StartRunning(index);
                 }
             };
+
             //AsyncTask.execute(CountRunnable);
-            CountThread = new Thread(CountRunnable);
-            CountThread.start();
+            new Thread(CountRunnable).start();
         }
     }
 
     private void StartRunning(final int index) {
         sharedPref = getContext().getSharedPreferences(getContext().getString(R.string.SharedPref), Context.MODE_PRIVATE);
-        StartTime = sharedPref.getLong("StartTime", 0);
-        //UpdateTime = sharedPref.getLong("UpdateTime", 0);
+        //StartTime = sharedPref.getLong("StartTime", 0);
         UpdateTime = returnSeconds(TimeTexts.get(index))*1000;
+
+        /*
         if (!arestatesfalse()) {
+            Log.d("Resetting StartTime"," ");
             StartTime = SystemClock.uptimeMillis();
-            UpdateTime = returnSeconds(TimeTexts.get(index)) * 1000;
+        }*/
+        Log.d("StartTimeUsed",String.valueOf(StartTime));
+        Log.d("SystemTime",String.valueOf(SystemClock.uptimeMillis()));
+        try {
+            Thread.sleep(1);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
-        Log.d("######", Long.toString(Thread.currentThread().getId()));
+
+        int prevSec = 0;
         while (State.get(index)) {
             MillisecondTime = UpdateTime + SystemClock.uptimeMillis() - StartTime;
+
 
             Seconds = (int) (MillisecondTime / 1000);
             Minutes = Seconds / 60;
@@ -171,68 +204,64 @@ public class CustomListAdapter extends ArrayAdapter<Main2Activity.myNode>{
             Seconds = Seconds % 60;
             Minutes = Minutes % 60;
             Hours = Hours % 60;
-            TimeTexts.set(index, "" + String.format(Locale.US, "%02d", Hours) + ":"
+            UpdateTimeValue = "" + String.format(Locale.US, "%02d", Hours) + ":"
                     + String.format(Locale.US, "%02d", Minutes) + ":"
-                    + String.format(Locale.US, "%02d", Seconds));
+                    + String.format(Locale.US, "%02d", Seconds);
 
 
-
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            if (Seconds-prevSec == 1) {
+                TotSec = TotSec+1;
+                prevSec = Seconds;
             }
+            TimeTexts.set(index, UpdateTimeValue);
 
-            Log.d(TimeTexts.get(index)," ");
+            //Log.d("TOTAL",Integer.toString(TotSec));
+            //Log.d(TimeTexts.get(index)," ");
             myHandler.post(callnotify);
+
         }
+        myHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                //updatetotaltime();
+                notifyDataSetChanged();
+            }
+        });
         StartTime = 0;
     }
 
     private Runnable callnotify = new Runnable() {
         @Override
         public void run() {
-            notifyDataSetChanged();
-            updatetotaltime();
+
+            TouchedViewChild = LV.getChildAt(storedIndex-LV.getFirstVisiblePosition());
+            if (TouchedViewChild == null){
+                return;
+            }
+            TouchedTV = (TextView) TouchedViewChild.findViewById(R.id.TextViewTime);
+            TouchedTV.setText(UpdateTimeValue);
+
         }
     };
 
     private void updatetotaltime() {
-        Activity act = (Activity) getContext();
+        //Activity act = (Activity) getContext();
         if (act != null) {
-            TextView total = (TextView) act.findViewById(R.id.TimeTotal);
-
-            int sumSec = 0;
-            int limit = TimeTexts.size()-2;
-            for (int i = 0;i<limit;i=i+3) {
-                sumSec = sumSec+returnSeconds(TimeTexts.get(i));
-                sumSec = sumSec+returnSeconds(TimeTexts.get(i+1));
-                sumSec = sumSec+returnSeconds(TimeTexts.get(i+2));
-            }
-
-            switch(TimeTexts.size() % 3) {
-                case 1:
-                    sumSec = sumSec+returnSeconds(TimeTexts.get(TimeTexts.size()-1));
-                    break;
-                case 2:
-                    sumSec = sumSec+returnSeconds(TimeTexts.get(TimeTexts.size()-1));
-                    sumSec = sumSec+returnSeconds(TimeTexts.get(TimeTexts.size()-2));
-                    break;
-            }
-
+            int sumSec = TotSec;
             int min = sumSec / 60;
             int hour = min/60;
             int sec = sumSec % 60;
             min = min % 60;
             hour = hour % 60;
 
+            TextView total = (TextView) act.findViewById(R.id.TimeTotal);
             total.setText(""+ String.format(Locale.US,"%02d",hour) +":"
                     + String.format(Locale.US,"%02d",min) + ":"
                     + String.format(Locale.US,"%02d",sec));
         }
     }
 
-    private int returnSeconds(String m_string) {
+    public int returnSeconds(String m_string) {
         int totalSeconds;
         int Hour = Integer.valueOf(m_string.substring(0,2));
         int Minute = Integer.valueOf(m_string.substring(3,5));
