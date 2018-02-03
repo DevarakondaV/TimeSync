@@ -1,3 +1,4 @@
+# This repo only contains the files that implement the different screens in the application.
 # TimeSync
 
 TimeSync is an android application that I am currently working on. The primary goal of the application is allow an 
